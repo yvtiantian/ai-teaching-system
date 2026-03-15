@@ -256,7 +256,6 @@ export default function AdminUsersPage() {
       {
         title: "用户ID",
         dataIndex: "id",
-        width: 190,
         render: (id: string) => (
           <Typography.Text copyable={{ text: id }} code>
             {id.slice(0, 8)}...
@@ -316,7 +315,7 @@ export default function AdminUsersPage() {
       {
         title: "操作",
         key: "actions",
-        width: 320,
+        width: 260,
         fixed: "right",
         render: (_: unknown, record) => (
           <Space size="small" wrap>
