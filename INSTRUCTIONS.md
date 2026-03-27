@@ -37,7 +37,6 @@
 ## 数据库规范
 - 主键使用 UUID (`gen_random_uuid()`)
 - 时间字段使用 `TIMESTAMPTZ`
-- 不使用 ENUM 类型，用 `TEXT + CHECK` 约束替代
 - 所有表添加 `created_at` 和 `updated_at` 审计字段
 - 启用 RLS (Row Level Security) 策略
 - 外键约束必须定义

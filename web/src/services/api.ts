@@ -49,9 +49,13 @@ function createTimedSignal(originalSignal: AbortSignal | null | undefined, timeo
   };
 }
 
+export interface ApiRequestOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
 export async function apiRequest<T>(
   path: string,
-  init?: RequestInit
+  init?: ApiRequestOptions
 ): Promise<T> {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
   const token = await getAccessToken();
@@ -62,10 +66,11 @@ export async function apiRequest<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const effectiveTimeout = init?.timeoutMs ?? API_TIMEOUT_MS;
   let response: Response;
   const { signal, cleanup, didTimeout } = createTimedSignal(
     init?.signal,
-    API_TIMEOUT_MS
+    effectiveTimeout
   );
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -75,7 +80,7 @@ export async function apiRequest<T>(
     });
   } catch (error) {
     if (didTimeout()) {
-      throw new Error(`API 请求超时（>${API_TIMEOUT_MS}ms），请检查后端服务状态`);
+      throw new Error(`API 请求超时（>${effectiveTimeout}ms），请检查后端服务状态`);
     }
 
     if (error instanceof DOMException && error.name === "AbortError") {

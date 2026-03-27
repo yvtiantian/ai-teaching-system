@@ -1,7 +1,7 @@
 "use client";
 
 import "../student/dashboard.css";
-import { BarChartOutlined, ReadOutlined } from "@ant-design/icons";
+import { BarChartOutlined, FormOutlined, ReadOutlined } from "@ant-design/icons";
 import RoleDashboardLayout from "@/components/layout/RoleDashboardLayout";
 
 export default function TeacherLayout({
@@ -24,6 +24,12 @@ export default function TeacherLayout({
           href: "/teacher/courses",
           label: "我的课程",
           icon: <ReadOutlined />,
+        },
+        {
+          key: "assignments",
+          href: "/teacher/assignments",
+          label: "布置作业",
+          icon: <FormOutlined />,
         },
       ]}
     >
