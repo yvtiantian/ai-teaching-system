@@ -95,13 +95,14 @@ class SessionService:
         agent_id: str | None = None,
         messages: list[dict] | None = None,
         auto_generate_title: bool = True,
+        initial_title: str | None = None,
     ) -> dict:
         """创建新 session"""
         session_id = session_id or str(uuid4())
         current_timestamp = int(time.time())
 
-        title = "新会话"
-        if auto_generate_title and messages:
+        title = initial_title or "新会话"
+        if not initial_title and auto_generate_title and messages:
             title = await generate_title(messages)
 
         new_session = AgentSession(

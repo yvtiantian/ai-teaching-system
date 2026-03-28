@@ -1,4 +1,4 @@
-"""AI 题目生成服务 — 调用 Ollama 根据参考资料生成结构化题目"""
+"""AI 题目生成服务 — 调用 DeepSeek 根据参考资料生成结构化题目"""
 
 from __future__ import annotations
 
@@ -14,10 +14,11 @@ from src.core.settings import settings
 from src.core.supabase_client import get_supabase_client
 from src.services.file_extractor import extract_text, supported_mime_types
 
-# Ollama API
-_OLLAMA_BASE = str(settings.ollama.resolved_chat_base_url).rstrip("/")
-_OLLAMA_MODEL = settings.ollama.resolved_chat_model
-_OLLAMA_TIMEOUT = 120.0  # 生成可能较慢
+# DeepSeek API
+_DS_BASE = settings.deepseek.base_url.rstrip("/")
+_DS_MODEL = settings.deepseek.resolved_chat_model
+_DS_API_KEY = settings.deepseek.api_key
+_DS_TIMEOUT = 120.0  # 生成可能较慢
 _MAX_FILE_PATHS = 10  # 单次生成最多引用文件数
 _ALLOWED_BUCKETS = {"assignment-materials"}  # 允许访问的 bucket 白名单
 
@@ -251,14 +252,14 @@ async def generate_questions(
         custom_prompt=custom_prompt,
     )
 
-    # 3. 调用 Ollama
+    # 3. 调用 DeepSeek
     start_time = time.monotonic()
     questions = None
     last_error: str | None = None
 
     for attempt in range(1, max_retries + 1):
         try:
-            raw = await _call_ollama(user_prompt)
+            raw = await _call_deepseek(user_prompt)
             parsed = _parse_response(raw)
             validation_errors = _validate_questions(parsed)
             if validation_errors:
@@ -288,58 +289,78 @@ async def generate_questions(
         "questions": questions,
         "total_score": total_score,
         "generation_meta": {
-            "model": _OLLAMA_MODEL,
+            "model": _DS_MODEL,
             "duration_ms": elapsed_ms,
         },
     }
 
 
-async def _call_ollama(user_prompt: str) -> str:
-    """调用 Ollama chat API，使用 JSON mode + 流式读取避免长生成超时。"""
+async def _call_deepseek(user_prompt: str) -> str:
+    """调用 DeepSeek chat API，使用 SSE 流式读取。"""
     payload = {
-        "model": _OLLAMA_MODEL,
+        "model": _DS_MODEL,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "format": "json",
+        "response_format": {"type": "json_object"},
         "stream": True,
-        "options": {
-            "temperature": 0.7,
-            "num_predict": 8192,
-        },
+        "temperature": 0.7,
+        "max_tokens": 8192,
     }
 
-    # connect/write/pool 30s 足够；read 120s 指两个 token 之间的最大间隔，
-    # 流式模式下 token 持续到达，read timeout 不断重置，总时长不受限。
-    timeout = httpx.Timeout(connect=30.0, read=_OLLAMA_TIMEOUT, write=30.0, pool=30.0)
+    timeout = httpx.Timeout(connect=30.0, read=_DS_TIMEOUT, write=30.0, pool=30.0)
     content_parts: list[str] = []
 
     async with httpx.AsyncClient(timeout=timeout) as client:
-        async with client.stream("POST", f"{_OLLAMA_BASE}/api/chat", json=payload) as resp:
+        async with client.stream(
+            "POST",
+            f"{_DS_BASE}/v1/chat/completions",
+            json=payload,
+            headers={"Authorization": f"Bearer {_DS_API_KEY}"},
+        ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
-                if not line.strip():
+                if not line.startswith("data: "):
                     continue
-                chunk = json.loads(line)
-                token = chunk.get("message", {}).get("content", "")
+                data = line[6:]
+                if data.strip() == "[DONE]":
+                    break
+                chunk = json.loads(data)
+                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                token = delta.get("content", "")
                 if token:
                     content_parts.append(token)
-                if chunk.get("done"):
-                    break
 
     content = "".join(content_parts)
     if not content:
-        raise RuntimeError("Ollama 返回空内容")
+        raise RuntimeError("DeepSeek 返回空内容")
     return content
 
 
+def _clean_literal_newlines(obj: Any) -> Any:
+    """递归清理所有字符串中的字面 \\n 为真正的换行符。
+
+    DeepSeek 有时会在 JSON 中生成双转义 \\\\n，经 json.loads 后会残留字面 \\n。
+    """
+    if isinstance(obj, str):
+        return obj.replace("\\n", "\n")
+    if isinstance(obj, list):
+        return [_clean_literal_newlines(item) for item in obj]
+    if isinstance(obj, dict):
+        return {k: _clean_literal_newlines(v) for k, v in obj.items()}
+    return obj
+
+
 def _parse_response(raw: str) -> list[dict]:
-    """解析 Ollama 返回的 JSON 字符串，提取 questions 列表。"""
+    """解析 DeepSeek 返回的 JSON 字符串，提取 questions 列表。"""
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"JSON 解析失败: {exc}") from exc
+
+    # 清理 LLM 可能产生的字面 \n
+    obj = _clean_literal_newlines(obj)
 
     # 兼容直接返回列表或包裹在 { "questions": [...] } 中
     if isinstance(obj, list):

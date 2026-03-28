@@ -1,6 +1,6 @@
-"""Ollama 标题生成服务
+"""DeepSeek 标题生成服务
 
-直接通过 httpx 调用 Ollama API 生成对话标题，不依赖额外框架。
+通过 OpenAI 兼容 API 调用 DeepSeek 生成对话标题。
 """
 
 import httpx
@@ -38,16 +38,17 @@ async def generate_title(messages: list[dict]) -> str:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
-                f"{settings.ollama.resolved_title_base_url}/api/generate",
+                f"{settings.deepseek.base_url}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.deepseek.api_key}"},
                 json={
-                    "model": settings.ollama.resolved_title_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.3, "num_predict": 30},
+                    "model": settings.deepseek.resolved_title_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "max_tokens": 30,
                 },
             )
             resp.raise_for_status()
-            title = resp.json().get("response", "").strip()
+            title = resp.json()["choices"][0]["message"]["content"].strip()
 
             # 清理：移除引号、换行等
             title = title.strip('"\'""「」').split("\n")[0].strip()

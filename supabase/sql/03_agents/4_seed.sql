@@ -17,7 +17,7 @@ VALUES (
 5. 如果学生的理解有误，温和地纠正
 
 请用中文回答，除非学生用其他语言提问。回答要简洁有条理。',
-    'qwen2.5:7b',
+    'deepseek-chat',
     0.7
 )
 ON CONFLICT (id) DO NOTHING;
@@ -37,7 +37,7 @@ VALUES (
 5. 输出应简洁、结构化、可直接执行
 
 请始终使用中文回答，并优先给出可落地的教学建议。',
-    'qwen2.5:7b',
+    'deepseek-chat',
     0.7
 )
 ON CONFLICT (id) DO NOTHING;

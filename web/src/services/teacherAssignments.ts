@@ -412,14 +412,17 @@ export async function generateAssignmentQuestions(
     timeoutMs: 300_000,
   });
 
+  /** 清理 LLM 生成文本中残留的字面 \n */
+  const nl = (s: string | null | undefined) => (s ? s.replace(/\\n/g, "\n") : s);
+
   return {
     questions: data.questions.map((q, idx) => ({
       questionType: q.question_type as Question["questionType"],
       sortOrder: q.sort_order ?? idx + 1,
-      content: q.content,
-      options: q.options,
+      content: nl(q.content) ?? q.content,
+      options: q.options?.map((o) => ({ ...o, text: nl(o.text) ?? o.text })),
       correctAnswer: q.correct_answer,
-      explanation: q.explanation,
+      explanation: nl(q.explanation),
       score: Number(q.score) || 0,
     })),
     totalScore: data.total_score,

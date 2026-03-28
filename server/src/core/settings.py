@@ -2,30 +2,19 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class OllamaSettings(BaseModel):
-    """Ollama 本地 LLM 配置"""
+class DeepSeekSettings(BaseModel):
+    """DeepSeek 云端 LLM 配置"""
 
-    base_url: str = "http://localhost:11434"
-    default_model: str = "qwen2.5:7b"
-    title_model: str = "qwen2.5:7b"
-    chat_base_url: str | None = None
+    api_key: str = ""
+    base_url: str = "https://api.deepseek.com"
+    default_model: str = "deepseek-chat"
     chat_model: str | None = None
-    title_base_url: str | None = None
-
-    @property
-    def resolved_chat_base_url(self) -> str:
-        """聊天主链路使用的 Ollama 地址（优先 chat_base_url）。"""
-        return self.chat_base_url or self.base_url
+    title_model: str | None = None
 
     @property
     def resolved_chat_model(self) -> str:
         """聊天主链路使用的模型（优先 chat_model）。"""
         return self.chat_model or self.default_model
-
-    @property
-    def resolved_title_base_url(self) -> str:
-        """标题生成链路使用的 Ollama 地址（优先 title_base_url）。"""
-        return self.title_base_url or self.base_url
 
     @property
     def resolved_title_model(self) -> str:
@@ -59,7 +48,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8100
 
-    ollama: OllamaSettings = OllamaSettings()
+    deepseek: DeepSeekSettings = DeepSeekSettings()
     supabase: SupabaseSettings = SupabaseSettings()
     database: DatabaseSettings = DatabaseSettings()
 

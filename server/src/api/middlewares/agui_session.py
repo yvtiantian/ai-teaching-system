@@ -2,11 +2,10 @@
 
 在 AGUI 对话请求进入 AgentOS 前自动确保 session 存在：
 - 首次 thread 自动创建 session
-- 首次创建立即返回，标题在后台异步生成
+- 标题取用户第一条消息
 - 保持请求体可重放，避免破坏 StreamingResponse
 """
 
-import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -149,19 +148,16 @@ class AGUISessionMiddleware(BaseHTTPMiddleware):
         except SessionNotFoundError:
             pass
 
+        # 用用户第一条消息作为会话标题
+        title = _extract_first_user_message(messages)
+
         await service.create_session(
             session_id=thread_id,
             agent_id=agent_id,
             messages=messages,
             auto_generate_title=False,
+            initial_title=title,
         )
-
-        if messages:
-            self._schedule_title_generation(
-                service=service,
-                session_id=thread_id,
-                messages=messages,
-            )
 
         logger.info(
             "AGUI 自动创建会话: thread_id={}, user_id={}, agent_id={}",
@@ -170,31 +166,15 @@ class AGUISessionMiddleware(BaseHTTPMiddleware):
             agent_id,
         )
 
-    def _schedule_title_generation(
-        self,
-        service: SessionService,
-        session_id: str,
-        messages: list[dict],
-    ) -> None:
-        # Snapshot messages to avoid accidental mutation after request scope ends.
-        message_snapshot = [m.copy() if isinstance(m, dict) else m for m in messages]
 
-        async def _run() -> None:
-            await service.generate_and_update_session_title(
-                session_id=session_id,
-                messages=message_snapshot,
-            )
-
-        try:
-            task = asyncio.create_task(_run())
-        except RuntimeError as exc:
-            logger.warning("无法调度后台标题生成任务: {}", exc)
-            return
-
-        def _on_done(done_task: asyncio.Task[None]) -> None:
-            try:
-                done_task.result()
-            except Exception as exc:
-                logger.warning("后台标题生成任务失败: {}", exc)
-
-        task.add_done_callback(_on_done)
+def _extract_first_user_message(messages: list[dict]) -> str:
+    """从消息列表中提取第一条用户消息作为标题。"""
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user" and content and isinstance(content, str):
+            # 取第一行，截断到 30 字符
+            first_line = content.strip().split("\n")[0].strip()
+            if first_line:
+                return first_line[:30]
+    return "新会话"

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.agents (
     description TEXT,
     avatar      TEXT,
     instructions TEXT,
-    model_name  TEXT NOT NULL DEFAULT 'qwen2.5:7b',
+    model_name  TEXT NOT NULL DEFAULT 'deepseek-chat',
     temperature NUMERIC(3,2) NOT NULL DEFAULT 0.7
         CHECK (temperature >= 0 AND temperature <= 2),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

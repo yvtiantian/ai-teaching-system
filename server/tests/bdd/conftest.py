@@ -73,10 +73,10 @@ class _FakeSupabaseClient:
         return _FakeTableQuery(data=None)
 
 
-# ── 假的 Ollama 响应 ──────────────────────────────────────
+# ── 假的 DeepSeek 响应 ──────────────────────────────────
 
 
-def build_mock_ollama_response(question_config: dict[str, Any]) -> dict:
+def build_mock_deepseek_response(question_config: dict[str, Any]) -> dict:
     """根据题目配置生成符合格式的假 AI 响应。"""
     questions: list[dict] = []
 

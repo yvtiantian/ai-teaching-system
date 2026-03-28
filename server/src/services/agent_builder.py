@@ -4,7 +4,7 @@
 """
 
 from agno.agent import Agent
-from agno.models.ollama import Ollama
+from agno.models.deepseek import DeepSeek
 from agno.db.sqlite.sqlite import SqliteDb
 from agno.os.app import AgentOS
 from agno.os.interfaces.agui import AGUI
@@ -16,10 +16,11 @@ from src.services.session_service import get_db
 
 def build_agent(config: dict) -> Agent:
     """根据配置字典构建一个 Agno Agent"""
-    model_id = config.get("model_name") or settings.ollama.resolved_chat_model
-    model = Ollama(
+    model_id = config.get("model_name") or settings.deepseek.resolved_chat_model
+    model = DeepSeek(
         id=model_id,
-        host=settings.ollama.resolved_chat_base_url,
+        api_key=settings.deepseek.api_key,
+        base_url=settings.deepseek.base_url,
     )
 
     db = get_db()

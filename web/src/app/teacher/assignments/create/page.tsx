@@ -48,6 +48,9 @@ import type { TeacherCourse } from "@/types/course";
 
 dayjs.locale("zh-cn");
 
+/** 将字面 \n 转为真正的换行符 */
+const nl = (s: string) => s.replace(/\\n/g, "\n");
+
 const { TextArea } = Input;
 const { Dragger } = Upload;
 
@@ -413,11 +416,9 @@ function CreateAssignmentInner() {
         {currentStep === 3 && (
           <StepPreview
             questions={questions}
-            editingIndex={editingIndex}
             onEdit={setEditingIndex}
             onDelete={handleDeleteQuestion}
             onMove={handleMoveQuestion}
-            onUpdate={handleUpdateQuestion}
             onAdd={handleAddQuestion}
           />
         )}
@@ -437,6 +438,24 @@ function CreateAssignmentInner() {
             question={addingQuestion}
             onSave={handleAddQuestionConfirm}
             onCancel={() => setAddingQuestion(null)}
+          />
+        )}
+      </Modal>
+
+      {/* 编辑题目弹窗 */}
+      <Modal
+        title="编辑题目"
+        open={editingIndex !== null}
+        onCancel={() => setEditingIndex(null)}
+        footer={null}
+        width={640}
+        destroyOnClose
+      >
+        {editingIndex !== null && questions[editingIndex] && (
+          <QuestionEditor
+            question={questions[editingIndex]}
+            onSave={(updated) => handleUpdateQuestion(editingIndex, updated)}
+            onCancel={() => setEditingIndex(null)}
           />
         )}
       </Modal>
@@ -699,19 +718,15 @@ function StepQuestionConfig({
 
 function StepPreview({
   questions,
-  editingIndex,
   onEdit,
   onDelete,
   onMove,
-  onUpdate,
   onAdd,
 }: {
   questions: Question[];
-  editingIndex: number | null;
-  onEdit: (i: number | null) => void;
+  onEdit: (i: number) => void;
   onDelete: (i: number) => void;
   onMove: (i: number, dir: "up" | "down") => void;
-  onUpdate: (i: number, q: Question) => void;
   onAdd: () => void;
 }) {
   const totalScore = questions.reduce((s, q) => s + q.score, 0);
@@ -728,15 +743,7 @@ function StepPreview({
         </Button>
       </div>
 
-      {questions.map((q, idx) =>
-        editingIndex === idx ? (
-          <QuestionEditor
-            key={idx}
-            question={q}
-            onSave={(updated) => onUpdate(idx, updated)}
-            onCancel={() => onEdit(null)}
-          />
-        ) : (
+      {questions.map((q, idx) => (
           <Card key={idx} size="small" className="!mb-0">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -749,23 +756,23 @@ function StepPreview({
                   className="!mb-1 whitespace-pre-wrap"
                   ellipsis={{ rows: 3, expandable: true }}
                 >
-                  {q.content || "(空题目)"}
+                  {nl(q.content) || "(空题目)"}
                 </Typography.Paragraph>
                 {q.options && q.options.length > 0 && (
                   <div className="space-y-0.5 text-sm text-gray-500">
                     {q.options.map((opt) => (
                       <div key={opt.label}>
-                        {opt.label}. {opt.text}
+                        {opt.label}. {nl(opt.text)}
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="mt-1 text-xs text-green-600">
-                  答案: {formatAnswer(q)}
+                <div className="mt-1 text-xs text-green-600 whitespace-pre-wrap">
+                  答案: {nl(formatAnswer(q))}
                 </div>
                 {q.explanation && (
-                  <div className="mt-0.5 text-xs text-gray-400">
-                    解析: {q.explanation}
+                  <div className="mt-0.5 text-xs text-gray-400 whitespace-pre-wrap">
+                    解析: {nl(q.explanation)}
                   </div>
                 )}
               </div>
@@ -799,8 +806,7 @@ function StepPreview({
               </Space>
             </div>
           </Card>
-        ),
-      )}
+      ))}
     </div>
   );
 }

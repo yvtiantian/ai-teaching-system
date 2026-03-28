@@ -32,6 +32,7 @@ class _FakeSessionService:
         agent_id: str | None = None,
         messages: list[dict] | None = None,
         auto_generate_title: bool = True,
+        initial_title: str | None = None,
     ) -> dict:
         assert session_id is not None
         self.__class__.created_calls.append(
@@ -41,6 +42,7 @@ class _FakeSessionService:
                 "agent_id": agent_id,
                 "messages": messages or [],
                 "auto_generate_title": auto_generate_title,
+                "initial_title": initial_title,
             }
         )
         self.__class__.existing_session_ids.add(session_id)

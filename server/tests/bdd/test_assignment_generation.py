@@ -10,7 +10,7 @@ import httpx
 import pytest
 from pytest_bdd import given, parsers, scenario, scenarios, then, when
 
-from tests.bdd.conftest import BDDContext, build_mock_ollama_response
+from tests.bdd.conftest import BDDContext, build_mock_deepseek_response
 
 # 绑定 feature 文件中的所有场景
 scenarios("features/assignment_generation.feature")
@@ -98,11 +98,11 @@ def teacher_set_prompt(ctx: BDDContext, prompt: str):
 
 @when("教师请求 AI 生成题目")
 def teacher_requests_generation(ctx: BDDContext):
-    """通过 HTTP API 发送生成请求，mock 掉 Supabase、Ollama 和 Auth。"""
+    """通过 HTTP API 发送生成请求，mock 掉 Supabase、DeepSeek 和 Auth。"""
     from tests.bdd.conftest import _FakeSupabaseClient
 
-    # 构建 mock Ollama 响应
-    mock_ai_response = build_mock_ollama_response(ctx.question_config)
+    # 构建 mock DeepSeek 响应
+    mock_ai_response = build_mock_deepseek_response(ctx.question_config)
     mock_json_str = json.dumps(mock_ai_response, ensure_ascii=False)
 
     fake_sb = _FakeSupabaseClient(
@@ -111,15 +111,10 @@ def teacher_requests_generation(ctx: BDDContext):
     )
 
     # mock httpx 响应（需要 request 实例才能调用 raise_for_status）
-    mock_request = httpx.Request("POST", "http://localhost:11434/api/chat")
-    mock_httpx_response = httpx.Response(
-        status_code=200,
-        json={
-            "message": {"content": mock_json_str},
-            "done": True,
-        },
-        request=mock_request,
-    )
+    mock_request = httpx.Request("POST", "https://api.deepseek.com/v1/chat/completions")
+
+    # 构造 _call_deepseek 的 mock，直接返回 JSON 字符串
+    async_call_mock = AsyncMock(return_value=mock_json_str)
 
     request_body = {
         "course_id": ctx.course_id,
@@ -143,9 +138,8 @@ def teacher_requests_generation(ctx: BDDContext):
             return_value=fake_sb,
         ),
         patch(
-            "httpx.AsyncClient.post",
-            new_callable=AsyncMock,
-            return_value=mock_httpx_response,
+            "src.services.assignment_generator._call_deepseek",
+            new=async_call_mock,
         ),
         patch(
             "src.middleware.auth.AuthMiddleware._resolve_payload",
