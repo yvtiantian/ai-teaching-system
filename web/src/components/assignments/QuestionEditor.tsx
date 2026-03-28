@@ -1,5 +1,3 @@
-"use client";
-
 import { Button, Card, Input, InputNumber, Radio, Select, Space } from "antd";
 import { useState } from "react";
 import type { Question, QuestionType } from "@/types/assignment";

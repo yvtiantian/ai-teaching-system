@@ -3,7 +3,7 @@ import { getAccessToken } from "@/lib/supabase";
 const DEFAULT_API_TIMEOUT_MS = 15_000;
 
 function resolveApiTimeoutMs(): number {
-  const raw = process.env.NEXT_PUBLIC_API_TIMEOUT_MS;
+  const raw = import.meta.env.VITE_API_TIMEOUT_MS;
   if (!raw) {
     return DEFAULT_API_TIMEOUT_MS;
   }
@@ -57,7 +57,7 @@ export async function apiRequest<T>(
   path: string,
   init?: ApiRequestOptions
 ): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
+  const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8100";
   const token = await getAccessToken();
 
   const headers = new Headers(init?.headers);

@@ -19,7 +19,7 @@ export async function runAgentStream(
   agentPath: string,
   payload: RunAgentPayload,
 ): Promise<Response> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8100";
+  const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8100";
   const token = await getAccessToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",

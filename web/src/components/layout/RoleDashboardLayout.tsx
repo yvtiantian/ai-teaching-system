@@ -1,9 +1,7 @@
-'use client'
-
 import React, { useMemo, useState } from 'react'
 import { Layout, Menu, Avatar, Breadcrumb, Dropdown, Modal } from 'antd'
 import { HomeOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons'
-import { useRouter, usePathname } from 'next/navigation'
+import { useNavigate, useLocation } from 'react-router'
 import { getSupabaseClient } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import ProfileContent from '@/components/settings/ProfileContent'
@@ -30,8 +28,8 @@ export default function RoleDashboardLayout({
   menuItems,
   children,
 }: RoleDashboardLayoutProps) {
-  const router = useRouter()
-  const pathname = usePathname()
+  const navigate = useNavigate()
+  const pathname = useLocation().pathname
   const user = useAuthStore((state) => state.user)
   const clearUser = useAuthStore((state) => state.clearUser)
   const [profileModalOpen, setProfileModalOpen] = useState(false)
@@ -64,7 +62,7 @@ export default function RoleDashboardLayout({
   const handleMenuClick: MenuProps['onClick'] = (e) => {
     const path = e.key
     if (path.startsWith('/')) {
-      router.push(path)
+      navigate(path)
     }
   }
 
@@ -77,7 +75,7 @@ export default function RoleDashboardLayout({
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem('selected-role')
       }
-      router.replace('/login')
+      navigate('/login', { replace: true })
     }
   }
 
