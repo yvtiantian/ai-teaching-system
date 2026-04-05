@@ -152,12 +152,24 @@ CREATE POLICY "Admins full access to assignment files"
 -- —— assignment_submissions 表 ——
 ALTER TABLE public.assignment_submissions ENABLE ROW LEVEL SECURITY;
 
--- 学生管理自己的提交记录
+-- 学生查看自己的提交记录
 DROP POLICY IF EXISTS "Students can manage own submissions" ON public.assignment_submissions;
-CREATE POLICY "Students can manage own submissions"
-    ON public.assignment_submissions FOR ALL
-    USING (student_id = auth.uid())
+DROP POLICY IF EXISTS "Students can select own submissions" ON public.assignment_submissions;
+CREATE POLICY "Students can select own submissions"
+    ON public.assignment_submissions FOR SELECT
+    USING (student_id = auth.uid());
+
+-- 学生创建自己的提交记录
+DROP POLICY IF EXISTS "Students can insert own submissions" ON public.assignment_submissions;
+CREATE POLICY "Students can insert own submissions"
+    ON public.assignment_submissions FOR INSERT
     WITH CHECK (student_id = auth.uid());
+
+-- 学生更新自己的提交记录
+DROP POLICY IF EXISTS "Students can update own submissions" ON public.assignment_submissions;
+CREATE POLICY "Students can update own submissions"
+    ON public.assignment_submissions FOR UPDATE
+    USING (student_id = auth.uid());
 
 -- 教师查看自己课程作业的提交记录
 DROP POLICY IF EXISTS "Teachers can view own course submissions" ON public.assignment_submissions;

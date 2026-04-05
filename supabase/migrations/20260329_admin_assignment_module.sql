@@ -1,117 +1,9 @@
--- =====================================================
--- 模块 06_assignments：管理员 RPC 函数
--- =====================================================
-
--- ————————————————
--- 管理员：查询全局作业列表（分页+筛选）
--- ————————————————
-CREATE OR REPLACE FUNCTION public.admin_list_assignments(
-    p_keyword TEXT DEFAULT NULL,
-    p_course_id UUID DEFAULT NULL,
-    p_status TEXT DEFAULT NULL,
-    p_page INT DEFAULT 1,
-    p_page_size INT DEFAULT 20
-)
-RETURNS JSON
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_uid UUID;
-    v_total BIGINT;
-    v_items JSON;
-    v_offset INT;
-BEGIN
-    v_uid := auth.uid();
-    IF v_uid IS NULL THEN
-        RAISE EXCEPTION '用户未登录';
-    END IF;
-    IF NOT public.is_current_user_admin() THEN
-        RAISE EXCEPTION '仅管理员可执行此操作';
-    END IF;
-
-    v_offset := (GREATEST(p_page, 1) - 1) * p_page_size;
-
-    -- 总数
-    SELECT COUNT(*) INTO v_total
-    FROM public.assignments a
-    WHERE (p_keyword IS NULL OR a.title ILIKE '%' || p_keyword || '%')
-      AND (p_course_id IS NULL OR a.course_id = p_course_id)
-      AND (p_status IS NULL OR a.status::TEXT = p_status);
-
-    -- 分页数据
-    SELECT COALESCE(json_agg(row_data), '[]'::json)
-    INTO v_items
-    FROM (
-        SELECT json_build_object(
-            'id',            a.id,
-            'title',         a.title,
-            'course_id',     a.course_id,
-            'course_name',   c.name,
-            'teacher_id',    a.teacher_id,
-            'teacher_name',  COALESCE(p.display_name, p.email),
-            'status',        a.status,
-            'deadline',      a.deadline,
-            'total_score',   a.total_score,
-            'question_count', (SELECT COUNT(*) FROM public.assignment_questions aq WHERE aq.assignment_id = a.id),
-            'created_at',    a.created_at,
-            'updated_at',    a.updated_at
-        ) AS row_data
-        FROM public.assignments a
-        JOIN public.courses c ON c.id = a.course_id
-        JOIN public.profiles p ON p.id = a.teacher_id
-        WHERE (p_keyword IS NULL OR a.title ILIKE '%' || p_keyword || '%')
-          AND (p_course_id IS NULL OR a.course_id = p_course_id)
-          AND (p_status IS NULL OR a.status::TEXT = p_status)
-        ORDER BY a.created_at DESC
-        LIMIT p_page_size OFFSET v_offset
-    ) t;
-
-    RETURN json_build_object(
-        'total', v_total,
-        'page',  p_page,
-        'page_size', p_page_size,
-        'items', v_items
-    );
-END;
-$$;
-
-COMMENT ON FUNCTION public.admin_list_assignments(TEXT, UUID, TEXT, INT, INT) IS '管理员查询全局作业列表';
-GRANT EXECUTE ON FUNCTION public.admin_list_assignments(TEXT, UUID, TEXT, INT, INT) TO authenticated;
-
-
--- ————————————————
--- 管理员：强制删除任意状态的作业
--- ————————————————
-CREATE OR REPLACE FUNCTION public.admin_delete_assignment(p_assignment_id UUID)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_uid UUID;
-BEGIN
-    v_uid := auth.uid();
-    IF v_uid IS NULL THEN
-        RAISE EXCEPTION '用户未登录';
-    END IF;
-    IF NOT public.is_current_user_admin() THEN
-        RAISE EXCEPTION '仅管理员可执行此操作';
-    END IF;
-
-    DELETE FROM public.assignments WHERE id = p_assignment_id;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION '作业不存在';
-    END IF;
-END;
-$$;
-
-COMMENT ON FUNCTION public.admin_delete_assignment(UUID) IS '管理员强制删除作业';
-GRANT EXECUTE ON FUNCTION public.admin_delete_assignment(UUID) TO authenticated;
+-- ====================================================
+-- admin_assignment_module: 管理员作业模块 RPC 函数
+-- Date: 2026-03-29
+-- Description: 新增 admin_get_assignment_detail, admin_update_assignment,
+--              admin_list_submissions, admin_get_submission_detail 四个管理员 RPC 函数
+-- ====================================================
 
 
 -- ————————————————
@@ -134,7 +26,6 @@ BEGIN
     IF v_uid IS NULL THEN RAISE EXCEPTION '用户未登录'; END IF;
     IF NOT public.is_current_user_admin() THEN RAISE EXCEPTION '仅管理员可执行此操作'; END IF;
 
-    -- 作业基本信息
     SELECT json_build_object(
         'id',              a.id,
         'title',           a.title,
@@ -158,7 +49,6 @@ BEGIN
 
     IF v_assignment IS NULL THEN RAISE EXCEPTION '作业不存在'; END IF;
 
-    -- 题目列表
     SELECT COALESCE(json_agg(
         json_build_object(
             'id',             q.id,
@@ -174,7 +64,6 @@ BEGIN
     FROM public.assignment_questions q
     WHERE q.assignment_id = p_assignment_id;
 
-    -- 统计数据
     SELECT json_build_object(
         'student_count',    COALESCE((
             SELECT COUNT(*) FROM public.course_enrollments ce
@@ -228,7 +117,6 @@ BEGIN
     SELECT status INTO v_current_status FROM public.assignments WHERE id = p_assignment_id;
     IF v_current_status IS NULL THEN RAISE EXCEPTION '作业不存在'; END IF;
 
-    -- 修改截止日期（仅 published 状态）
     IF p_deadline IS NOT NULL THEN
         IF v_current_status != 'published' THEN
             RAISE EXCEPTION '只有已发布的作业可以修改截止日期';
@@ -240,7 +128,6 @@ BEGIN
         WHERE id = p_assignment_id;
     END IF;
 
-    -- 状态变更
     IF p_status IS NOT NULL THEN
         IF p_status = 'closed' THEN
             IF v_current_status != 'published' THEN
@@ -253,7 +140,6 @@ BEGIN
             IF v_current_status != 'closed' THEN
                 RAISE EXCEPTION '只有已关闭的作业可以重新开放';
             END IF;
-            -- 重新开放时必须提供新的截止日期
             IF p_deadline IS NULL THEN
                 RAISE EXCEPTION '重新开放作业必须设置新的截止日期';
             END IF;
@@ -295,7 +181,6 @@ SET search_path = public
 AS $$
 DECLARE
     v_uid UUID;
-    v_course_id UUID;
     v_total BIGINT;
     v_items JSON;
     v_offset INT;
@@ -304,46 +189,35 @@ BEGIN
     IF v_uid IS NULL THEN RAISE EXCEPTION '用户未登录'; END IF;
     IF NOT public.is_current_user_admin() THEN RAISE EXCEPTION '仅管理员可执行此操作'; END IF;
 
-    SELECT course_id INTO v_course_id
-    FROM public.assignments WHERE id = p_assignment_id;
-
-    IF NOT FOUND THEN
+    IF NOT EXISTS (SELECT 1 FROM public.assignments WHERE id = p_assignment_id) THEN
         RAISE EXCEPTION '作业不存在';
     END IF;
 
     v_offset := (GREATEST(p_page, 1) - 1) * p_page_size;
 
-    -- 总数：从选课表出发，含未开始的学生
     SELECT COUNT(*) INTO v_total
-    FROM public.course_enrollments ce
-    WHERE ce.course_id = v_course_id AND ce.status = 'active'
-      AND (p_status IS NULL
-           OR COALESCE(
-               (SELECT sub.status::TEXT FROM public.assignment_submissions sub
-                WHERE sub.assignment_id = p_assignment_id AND sub.student_id = ce.student_id),
-               'not_started'
-           ) = p_status);
+    FROM public.assignment_submissions s
+    WHERE s.assignment_id = p_assignment_id
+      AND (p_status IS NULL OR s.status::TEXT = p_status);
 
     SELECT COALESCE(json_agg(row_data), '[]'::json)
     INTO v_items
     FROM (
         SELECT json_build_object(
             'id',             s.id,
-            'student_id',     p.id,
+            'student_id',     s.student_id,
             'student_name',   COALESCE(p.display_name, p.email),
-            'status',         COALESCE(s.status, 'not_started'),
+            'status',         s.status,
             'submitted_at',   s.submitted_at,
             'total_score',    s.total_score,
             'created_at',     s.created_at,
             'updated_at',     s.updated_at
         ) AS row_data
-        FROM public.course_enrollments ce
-        JOIN public.profiles p ON p.id = ce.student_id
-        LEFT JOIN public.assignment_submissions s
-            ON s.assignment_id = p_assignment_id AND s.student_id = ce.student_id
-        WHERE ce.course_id = v_course_id AND ce.status = 'active'
-          AND (p_status IS NULL OR COALESCE(s.status::TEXT, 'not_started') = p_status)
-        ORDER BY s.submitted_at DESC NULLS LAST, ce.enrolled_at ASC
+        FROM public.assignment_submissions s
+        JOIN public.profiles p ON p.id = s.student_id
+        WHERE s.assignment_id = p_assignment_id
+          AND (p_status IS NULL OR s.status::TEXT = p_status)
+        ORDER BY s.submitted_at DESC NULLS LAST
         LIMIT p_page_size OFFSET v_offset
     ) t;
 
@@ -383,7 +257,6 @@ BEGIN
     IF v_uid IS NULL THEN RAISE EXCEPTION '用户未登录'; END IF;
     IF NOT public.is_current_user_admin() THEN RAISE EXCEPTION '仅管理员可执行此操作'; END IF;
 
-    -- 提交基本信息
     SELECT json_build_object(
         'id',              s.id,
         'assignment_id',   s.assignment_id,
@@ -402,7 +275,6 @@ BEGIN
 
     IF v_submission IS NULL THEN RAISE EXCEPTION '提交记录不存在'; END IF;
 
-    -- 答案详情（JOIN 题目信息）
     SELECT COALESCE(json_agg(
         json_build_object(
             'id',              sa.id,
@@ -428,51 +300,19 @@ BEGIN
     JOIN public.assignment_questions q ON q.id = sa.question_id
     WHERE sa.submission_id = p_submission_id;
 
-    -- 上一个/下一个 submission（同一作业，按 submitted_at DESC NULLS LAST, id DESC 排序）
-    -- prev = 排序中在当前记录之前的第一条（submitted_at 更大，或相同时 id 更大）
-    IF v_submitted_at IS NOT NULL THEN
-        SELECT id INTO v_prev_id
-        FROM public.assignment_submissions
-        WHERE assignment_id = v_assignment_id
-          AND id != p_submission_id
-          AND (submitted_at > v_submitted_at
-               OR (submitted_at = v_submitted_at AND id > p_submission_id))
-        ORDER BY submitted_at ASC NULLS LAST, id ASC
-        LIMIT 1;
-    ELSE
-        -- 当前记录 submitted_at 为 NULL（排在最后），prev 只在同为 NULL 的记录中找 id 更大的
-        SELECT id INTO v_prev_id
-        FROM public.assignment_submissions
-        WHERE assignment_id = v_assignment_id
-          AND id != p_submission_id
-          AND (submitted_at IS NOT NULL
-               OR (submitted_at IS NULL AND id > p_submission_id))
-        ORDER BY submitted_at ASC NULLS LAST, id ASC
-        LIMIT 1;
-    END IF;
+    SELECT id INTO v_prev_id
+    FROM public.assignment_submissions
+    WHERE assignment_id = v_assignment_id
+      AND (submitted_at < v_submitted_at OR (submitted_at = v_submitted_at AND id < p_submission_id))
+    ORDER BY submitted_at DESC NULLS LAST, id DESC
+    LIMIT 1;
 
-    -- next = 排序中在当前记录之后的第一条（submitted_at 更小，或相同时 id 更小）
-    IF v_submitted_at IS NOT NULL THEN
-        SELECT id INTO v_next_id
-        FROM public.assignment_submissions
-        WHERE assignment_id = v_assignment_id
-          AND id != p_submission_id
-          AND (submitted_at < v_submitted_at
-               OR (submitted_at = v_submitted_at AND id < p_submission_id)
-               OR submitted_at IS NULL)
-        ORDER BY submitted_at DESC NULLS LAST, id DESC
-        LIMIT 1;
-    ELSE
-        -- 当前记录 submitted_at 为 NULL（排在最后），next 只在同为 NULL 且 id 更小的记录中找
-        SELECT id INTO v_next_id
-        FROM public.assignment_submissions
-        WHERE assignment_id = v_assignment_id
-          AND id != p_submission_id
-          AND submitted_at IS NULL
-          AND id < p_submission_id
-        ORDER BY id DESC
-        LIMIT 1;
-    END IF;
+    SELECT id INTO v_next_id
+    FROM public.assignment_submissions
+    WHERE assignment_id = v_assignment_id
+      AND (submitted_at > v_submitted_at OR (submitted_at = v_submitted_at AND id > p_submission_id))
+    ORDER BY submitted_at ASC NULLS LAST, id ASC
+    LIMIT 1;
 
     RETURN json_build_object(
         'submission', v_submission,

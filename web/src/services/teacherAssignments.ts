@@ -9,6 +9,10 @@ import type {
   GenerateQuestionsPayload,
   GenerateQuestionsResult,
   Question,
+  QuestionType,
+  SubmissionDetail,
+  SubmissionDetailAnswer,
+  SubmissionStatus,
   SubmissionSummary,
   UpdateAssignmentPayload,
 } from "@/types/assignment";
@@ -88,6 +92,7 @@ interface StatsRow {
   total_students: number;
   submitted_count: number;
   not_submitted_count: number;
+  ai_graded_count: number;
   graded_count: number;
   submission_rate: number;
 }
@@ -103,6 +108,7 @@ interface SubmissionItemRow {
   student_id: string;
   student_name: string | null;
   student_email: string;
+  submission_id?: string;
   status: string;
   submitted_at: string | null;
   total_score: number | null;
@@ -196,6 +202,7 @@ function toStats(row: StatsRow): AssignmentStats {
     totalStudents: row.total_students,
     submittedCount: row.submitted_count,
     notSubmittedCount: row.not_submitted_count,
+    aiGradedCount: row.ai_graded_count ?? 0,
     gradedCount: row.graded_count,
     submissionRate: row.submission_rate,
   };
@@ -206,6 +213,7 @@ function toSubmission(row: SubmissionItemRow): SubmissionSummary {
     studentId: row.student_id,
     studentName: row.student_name,
     studentEmail: row.student_email,
+    submissionId: row.submission_id ?? null,
     status: row.status,
     submittedAt: row.submitted_at,
     totalScore: row.total_score,
@@ -295,6 +303,20 @@ export async function teacherCloseAssignment(assignmentId: string): Promise<void
     await supabaseRpc("teacher_close_assignment", { p_assignment_id: assignmentId });
   } catch (error) {
     throw mapError(error, "关闭作业失败");
+  }
+}
+
+export async function teacherReopenAssignment(
+  assignmentId: string,
+  deadline?: string
+): Promise<void> {
+  try {
+    await supabaseRpc("teacher_reopen_assignment", {
+      p_assignment_id: assignmentId,
+      p_deadline: deadline ?? null,
+    });
+  } catch (error) {
+    throw mapError(error, "重新打开作业失败");
   }
 }
 
@@ -431,4 +453,132 @@ export async function generateAssignmentQuestions(
       durationMs: data.generation_meta.duration_ms,
     },
   };
+}
+
+// ── 教师阅卷/复核 ───────────────────────────────────
+
+interface SubmissionDetailRow {
+  submission_id: string;
+  assignment_id: string;
+  assignment_title: string;
+  assignment_total_score: number;
+  student_id: string;
+  student_name: string | null;
+  student_email: string;
+  status: string;
+  submitted_at: string | null;
+  total_score: number | null;
+  answers: SubmissionDetailAnswerRow[];
+}
+
+interface SubmissionDetailAnswerRow {
+  answer_id: string;
+  question_id: string;
+  question_type: string;
+  sort_order: number;
+  content: string;
+  options: Array<{ label: string; text: string }> | null;
+  correct_answer: Record<string, unknown>;
+  explanation: string | null;
+  max_score: number;
+  student_answer: Record<string, unknown>;
+  score: number;
+  is_correct: boolean | null;
+  ai_score: number | null;
+  ai_feedback: string | null;
+  ai_detail: Record<string, unknown> | null;
+  teacher_comment: string | null;
+  graded_by: string;
+}
+
+function toSubmissionDetailAnswer(row: SubmissionDetailAnswerRow): SubmissionDetailAnswer {
+  return {
+    answerId: row.answer_id,
+    questionId: row.question_id,
+    questionType: row.question_type as QuestionType,
+    sortOrder: row.sort_order,
+    content: row.content,
+    options: row.options,
+    correctAnswer: row.correct_answer,
+    explanation: row.explanation,
+    maxScore: Number(row.max_score) || 0,
+    studentAnswer: row.student_answer,
+    score: Number(row.score) || 0,
+    isCorrect: row.is_correct,
+    aiScore: row.ai_score != null ? Number(row.ai_score) : null,
+    aiFeedback: row.ai_feedback,
+    aiDetail: row.ai_detail,
+    teacherComment: row.teacher_comment,
+    gradedBy: row.graded_by,
+  };
+}
+
+function toSubmissionDetail(row: SubmissionDetailRow): SubmissionDetail {
+  return {
+    submissionId: row.submission_id,
+    assignmentId: row.assignment_id,
+    assignmentTitle: row.assignment_title,
+    assignmentTotalScore: Number(row.assignment_total_score) || 0,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    studentEmail: row.student_email,
+    status: row.status as SubmissionStatus,
+    submittedAt: row.submitted_at,
+    totalScore: row.total_score != null ? Number(row.total_score) : null,
+    answers: (row.answers ?? []).map(toSubmissionDetailAnswer),
+  };
+}
+
+export async function teacherGetSubmissionDetail(
+  submissionId: string
+): Promise<SubmissionDetail> {
+  try {
+    const data = await supabaseRpc<SubmissionDetailRow>(
+      "teacher_get_submission_detail",
+      { p_submission_id: submissionId }
+    );
+    return toSubmissionDetail(data);
+  } catch (error) {
+    throw mapError(error, "获取提交详情失败");
+  }
+}
+
+export async function teacherGradeAnswer(
+  answerId: string,
+  score: number,
+  comment?: string
+): Promise<void> {
+  try {
+    await supabaseRpc("teacher_grade_answer", {
+      p_answer_id: answerId,
+      p_score: score,
+      p_comment: comment ?? null,
+    });
+  } catch (error) {
+    throw mapError(error, "批改失败");
+  }
+}
+
+export async function teacherAcceptAllAiScores(
+  submissionId: string
+): Promise<void> {
+  try {
+    await supabaseRpc("teacher_accept_all_ai_scores", {
+      p_submission_id: submissionId,
+    });
+  } catch (error) {
+    throw mapError(error, "采纳AI评分失败");
+  }
+}
+
+export async function teacherFinalizeGrading(
+  submissionId: string
+): Promise<void> {
+  try {
+    await supabaseRpc("teacher_finalize_grading", {
+      p_submission_id: submissionId,
+    });
+  } catch (error) {
+    throw mapError(error, "确认复核失败");
+  }
 }

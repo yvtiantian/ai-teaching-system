@@ -28,6 +28,7 @@ import {
   teacherUpdateAssignment,
 } from "@/services/teacherAssignments";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage } from "@/lib/utils";
 import type {
   AssignmentDetail,
   Question,
@@ -44,11 +45,6 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   true_false: "判断题",
   short_answer: "简答题",
 };
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
 
 interface BasicFormValues {
   title: string;

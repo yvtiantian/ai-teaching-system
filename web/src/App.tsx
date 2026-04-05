@@ -15,6 +15,9 @@ import LoginPage from "@/pages/LoginPage";
 import AdminUsersPage from "@/pages/admin/UsersPage";
 import AdminCoursesPage from "@/pages/admin/CoursesPage";
 import AdminCourseDetailPage from "@/pages/admin/CourseDetailPage";
+import AdminAssignmentsPage from "@/pages/admin/AssignmentsPage";
+import AdminAssignmentDetailPage from "@/pages/admin/AssignmentDetailPage";
+import AdminSubmissionDetailPage from "@/pages/admin/SubmissionDetailPage";
 
 /* teacher */
 import TeacherLearnPage from "@/pages/teacher/LearnPage";
@@ -25,10 +28,14 @@ import TeacherAssignmentCreatePage from "@/pages/teacher/AssignmentCreatePage";
 import TeacherAssignmentDetailPage from "@/pages/teacher/AssignmentDetailPage";
 import TeacherAssignmentEditPage from "@/pages/teacher/AssignmentEditPage";
 import TeacherAssignmentStatsPage from "@/pages/teacher/AssignmentStatsPage";
+import TeacherGradingDetailPage from "@/pages/teacher/GradingDetailPage";
 
 /* student */
 import StudentLearnPage from "@/pages/student/LearnPage";
 import StudentCoursesPage from "@/pages/student/CoursesPage";
+import StudentAssignmentsPage from "@/pages/student/AssignmentsPage";
+import StudentAssignmentAnswerPage from "@/pages/student/AssignmentAnswerPage";
+import StudentAssignmentResultPage from "@/pages/student/AssignmentResultPage";
 
 export default function App() {
   return (
@@ -72,6 +79,9 @@ export default function App() {
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="courses" element={<AdminCoursesPage />} />
           <Route path="courses/:id" element={<AdminCourseDetailPage />} />
+          <Route path="assignments" element={<AdminAssignmentsPage />} />
+          <Route path="assignments/:id" element={<AdminAssignmentDetailPage />} />
+          <Route path="assignments/:id/submissions/:submissionId" element={<AdminSubmissionDetailPage />} />
         </Route>
 
         {/* Teacher */}
@@ -85,6 +95,7 @@ export default function App() {
           <Route path="assignments/:assignmentId" element={<TeacherAssignmentDetailPage />} />
           <Route path="assignments/:assignmentId/edit" element={<TeacherAssignmentEditPage />} />
           <Route path="assignments/:assignmentId/stats" element={<TeacherAssignmentStatsPage />} />
+          <Route path="assignments/:assignmentId/grade/:submissionId" element={<TeacherGradingDetailPage />} />
         </Route>
 
         {/* Student */}
@@ -92,6 +103,9 @@ export default function App() {
           <Route index element={<Navigate to="learn" replace />} />
           <Route path="learn" element={<StudentLearnPage />} />
           <Route path="courses" element={<StudentCoursesPage />} />
+          <Route path="assignments" element={<StudentAssignmentsPage />} />
+          <Route path="assignments/:assignmentId" element={<StudentAssignmentAnswerPage />} />
+          <Route path="assignments/:assignmentId/result" element={<StudentAssignmentResultPage />} />
         </Route>
 
         {/* Catch-all */}

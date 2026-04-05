@@ -28,6 +28,7 @@ import {
   adminUpdateCourse,
 } from "@/services/adminCourses";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage, formatDateTime } from "@/lib/utils";
 import type {
   AdminCourse,
   AdminCourseListQuery,
@@ -62,17 +63,6 @@ const DEFAULT_QUERY_STATE: QueryState = {
   page: 1,
   pageSize: 20,
 };
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : "-";
-}
 
 export default function AdminCoursesPage() {
   const navigate = useNavigate();

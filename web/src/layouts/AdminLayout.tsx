@@ -1,5 +1,5 @@
 import { Outlet } from "react-router";
-import { ReadOutlined, TeamOutlined } from "@ant-design/icons";
+import { FileTextOutlined, ReadOutlined, TeamOutlined } from "@ant-design/icons";
 import RoleDashboardLayout from "@/components/layout/RoleDashboardLayout";
 
 export default function AdminLayout() {
@@ -18,6 +18,12 @@ export default function AdminLayout() {
           href: "/admin/courses",
           label: "课程管理",
           icon: <ReadOutlined />,
+        },
+        {
+          key: "assignments",
+          href: "/admin/assignments",
+          label: "作业管理",
+          icon: <FileTextOutlined />,
         },
       ]}
     >

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getRoleRedirectPath } from "@/lib/profile";
 import { teacherGetAssignmentDetail } from "@/services/teacherAssignments";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage, formatDateTime } from "@/lib/utils";
 import type { AssignmentDetail, AssignmentStatus, QuestionType } from "@/types/assignment";
 
 dayjs.locale("zh-cn");
@@ -32,17 +33,6 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   true_false: "判断题",
   short_answer: "简答题",
 };
-
-function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : "-";
-}
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
 
 export default function AssignmentDetailPage() {
   const navigate = useNavigate();

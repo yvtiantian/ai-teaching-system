@@ -22,26 +22,18 @@ import {
   teacherListSubmissions,
 } from "@/services/teacherAssignments";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage, formatDateTime } from "@/lib/utils";
 import type { AssignmentStats, SubmissionSummary } from "@/types/assignment";
 
 dayjs.locale("zh-cn");
 
-function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : "-";
-}
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
-
 const STATUS_TAG: Record<string, { label: string; color: string }> = {
-  not_started: { label: "未开始", color: "default" },
+  not_started: { label: "未作答", color: "default" },
   in_progress: { label: "作答中", color: "processing" },
   submitted: { label: "已提交", color: "green" },
-  graded: { label: "已批改", color: "blue" },
+  ai_grading: { label: "AI批改中", color: "orange" },
+  ai_graded: { label: "AI已批", color: "cyan" },
+  graded: { label: "已复核", color: "blue" },
 };
 
 export default function AssignmentStatsPage() {
@@ -131,8 +123,30 @@ export default function AssignmentStatsPage() {
         align: "center",
         render: (v: number | null) => (v != null ? v : "-"),
       },
+      {
+        title: "操作",
+        key: "action",
+        width: 100,
+        align: "center",
+        render: (_: unknown, record: SubmissionSummary) => {
+          if (record.status === "ai_grading") {
+            return <Tag color="orange">AI批改中</Tag>;
+          }
+          const canGrade = ["submitted", "ai_graded", "graded"].includes(record.status);
+          if (!canGrade) return null;
+          return (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => navigate(`/teacher/assignments/${assignmentId}/grade/${record.submissionId}`)}
+            >
+              {record.status === "graded" ? "查看" : "复核"}
+            </Button>
+          );
+        },
+      },
     ],
-    [],
+    [assignmentId, navigate],
   );
 
   if (!authInitialized || !user || user.role !== "teacher") {
@@ -160,7 +174,7 @@ export default function AssignmentStatsPage() {
 
       {/* 统计卡片 */}
       {stats && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           <Card size="small">
             <Statistic title="课程总人数" value={stats.totalStudents} />
           </Card>
@@ -169,6 +183,9 @@ export default function AssignmentStatsPage() {
           </Card>
           <Card size="small">
             <Statistic title="未提交" value={stats.notSubmittedCount} />
+          </Card>
+          <Card size="small">
+            <Statistic title="AI已批/待复核" value={stats.aiGradedCount} valueStyle={{ color: stats.aiGradedCount > 0 ? "#0891b2" : undefined }} />
           </Card>
           <Card size="small">
             <Statistic
@@ -198,8 +215,9 @@ export default function AssignmentStatsPage() {
           {[
             { value: undefined, label: "全部" },
             { value: "submitted", label: "已提交" },
+            { value: "ai_graded", label: "AI已批" },
             { value: "not_started", label: "未提交" },
-            { value: "graded", label: "已批改" },
+            { value: "graded", label: "已复核" },
           ].map((item) => (
             <Tag
               key={item.label}

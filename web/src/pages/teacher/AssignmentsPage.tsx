@@ -6,6 +6,7 @@ import {
   BarChartOutlined,
   PlusOutlined,
   ReloadOutlined,
+  PlayCircleOutlined,
 } from "@ant-design/icons";
 import {
   Button,
@@ -28,25 +29,16 @@ import {
   teacherCloseAssignment,
   teacherDeleteAssignment,
   teacherListAssignments,
+  teacherReopenAssignment,
   teacherUpdateDeadline,
 } from "@/services/teacherAssignments";
 import { teacherListCourses } from "@/services/teacherCourses";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage, formatDateTime } from "@/lib/utils";
 import type { Assignment, AssignmentStatus } from "@/types/assignment";
 import type { TeacherCourse } from "@/types/course";
 
 dayjs.locale("zh-cn");
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : "-";
-}
 
 const STATUS_MAP: Record<AssignmentStatus, { label: string; color: string }> = {
   draft: { label: "草稿", color: "default" },
@@ -67,6 +59,9 @@ export default function TeacherAssignmentsPage() {
   const [deadlineTarget, setDeadlineTarget] = useState<Assignment | null>(null);
   const [deadlineValue, setDeadlineValue] = useState<dayjs.Dayjs | null>(null);
   const [deadlineSaving, setDeadlineSaving] = useState(false);
+  const [reopenTarget, setReopenTarget] = useState<Assignment | null>(null);
+  const [reopenDeadline, setReopenDeadline] = useState<dayjs.Dayjs | null>(null);
+  const [reopenSaving, setReopenSaving] = useState(false);
 
   const canAccess = authInitialized && user?.role === "teacher";
 
@@ -162,6 +157,50 @@ export default function TeacherAssignmentsPage() {
     setDeadlineTarget(record);
     setDeadlineValue(record.deadline ? dayjs(record.deadline) : null);
   }, []);
+
+  const handleReopen = useCallback(
+    (record: Assignment) => {
+      const isPastDeadline = !record.deadline || dayjs(record.deadline).isBefore(dayjs());
+      if (isPastDeadline) {
+        // 已超过截止日期，弹窗设置新截止时间
+        setReopenTarget(record);
+        setReopenDeadline(null);
+      } else {
+        // 手动关闭、截止时间未到，直接打开
+        Modal.confirm({
+          title: "重新打开作业",
+          content: `确定重新打开「${record.title}」？打开后学生可继续提交。`,
+          okText: "打开",
+          cancelText: "取消",
+          onOk: async () => {
+            try {
+              await teacherReopenAssignment(record.id);
+              message.success("作业已重新打开");
+              await loadAssignments();
+            } catch (error) {
+              message.error(toErrorMessage(error, "重新打开作业失败"));
+            }
+          },
+        });
+      }
+    },
+    [loadAssignments],
+  );
+
+  const handleReopenSave = useCallback(async () => {
+    if (!reopenTarget || !reopenDeadline) return;
+    setReopenSaving(true);
+    try {
+      await teacherReopenAssignment(reopenTarget.id, reopenDeadline.toISOString());
+      message.success("作业已重新打开");
+      setReopenTarget(null);
+      await loadAssignments();
+    } catch (error) {
+      message.error(toErrorMessage(error, "重新打开作业失败"));
+    } finally {
+      setReopenSaving(false);
+    }
+  }, [reopenTarget, reopenDeadline, loadAssignments]);
 
   const handleDeadlineSave = useCallback(async () => {
     if (!deadlineTarget || !deadlineValue) return;
@@ -300,11 +339,21 @@ export default function TeacherAssignmentsPage() {
                 </Button>
               </>
             )}
+            {record.status === "closed" && (
+              <Button
+                type="link"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={() => handleReopen(record)}
+              >
+                重新打开
+              </Button>
+            )}
           </Space>
         ),
       },
     ],
-    [handleClose, handleDelete, openDeadlineModal, navigate],
+    [handleClose, handleDelete, handleReopen, openDeadlineModal, navigate],
   );
 
   if (!authInitialized || !user || user.role !== "teacher") {
@@ -374,6 +423,29 @@ export default function TeacherAssignmentsPage() {
             className="w-full"
             value={deadlineValue}
             onChange={(val) => setDeadlineValue(val)}
+            disabledDate={(current) => current && current < dayjs().startOf("day")}
+            placeholder="选择新的截止日期"
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        title="重新打开作业"
+        open={!!reopenTarget}
+        onCancel={() => setReopenTarget(null)}
+        onOk={handleReopenSave}
+        confirmLoading={reopenSaving}
+        okText="打开"
+        cancelText="取消"
+        okButtonProps={{ disabled: !reopenDeadline }}
+      >
+        <div className="py-4">
+          <p className="mb-3 text-gray-500">该作业已超过截止日期，重新打开需要设置新的截止时间。</p>
+          <DatePicker
+            showTime
+            className="w-full"
+            value={reopenDeadline}
+            onChange={(val) => setReopenDeadline(val)}
             disabledDate={(current) => current && current < dayjs().startOf("day")}
             placeholder="选择新的截止日期"
           />

@@ -37,6 +37,7 @@ import {
 import { teacherListCourses } from "@/services/teacherCourses";
 import QuestionEditor, { formatAnswer } from "@/components/assignments/QuestionEditor";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage, QUESTION_TYPE_LABELS } from "@/lib/utils";
 import type {
   Question,
   QuestionConfig,
@@ -52,14 +53,6 @@ const nl = (s: string) => s.replace(/\\n/g, "\n");
 const { TextArea } = Input;
 const { Dragger } = Upload;
 
-const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  single_choice: "单选题",
-  multiple_choice: "多选题",
-  fill_blank: "填空题",
-  true_false: "判断题",
-  short_answer: "简答题",
-};
-
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -68,11 +61,6 @@ const ALLOWED_MIME_TYPES = [
   "text/markdown",
 ];
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
 
 const DEFAULT_AI_PROMPT = `请确保题目:
 - 难度适中，覆盖核心知识点

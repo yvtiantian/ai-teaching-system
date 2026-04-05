@@ -25,23 +25,13 @@ import {
   studentListCourses,
 } from "@/services/studentCourses";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage, formatDateTime } from "@/lib/utils";
 import type { StudentCourse } from "@/types/course";
 
 dayjs.locale("zh-cn");
 
 interface JoinFormValues {
   courseCode: string;
-}
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return "-";
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("YYYY-MM-DD HH:mm") : "-";
 }
 
 export default function StudentCoursesPage() {

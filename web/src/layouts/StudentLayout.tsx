@@ -1,5 +1,5 @@
 import { Outlet } from "react-router";
-import { BookOutlined, ReadOutlined } from "@ant-design/icons";
+import { BookOutlined, FormOutlined, ReadOutlined } from "@ant-design/icons";
 import RoleDashboardLayout from "@/components/layout/RoleDashboardLayout";
 
 export default function StudentLayout() {
@@ -18,6 +18,12 @@ export default function StudentLayout() {
           href: "/student/courses",
           label: "我的课程",
           icon: <ReadOutlined />,
+        },
+        {
+          key: "assignments",
+          href: "/student/assignments",
+          label: "我的作业",
+          icon: <FormOutlined />,
         },
       ]}
     >

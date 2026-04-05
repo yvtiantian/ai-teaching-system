@@ -1,16 +1,9 @@
 import { Button, Card, Input, InputNumber, Radio, Select, Space } from "antd";
 import { useState } from "react";
 import type { Question, QuestionType } from "@/types/assignment";
+import { QUESTION_TYPE_LABELS } from "@/lib/utils";
 
 const { TextArea } = Input;
-
-const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  single_choice: "单选题",
-  multiple_choice: "多选题",
-  fill_blank: "填空题",
-  true_false: "判断题",
-  short_answer: "简答题",
-};
 
 const OPTION_LABELS = ["A", "B", "C", "D", "E", "F"];
 

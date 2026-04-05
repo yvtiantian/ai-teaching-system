@@ -345,7 +345,7 @@ BEGIN
     LEFT JOIN (
         SELECT asub.assignment_id, COUNT(*)::BIGINT AS cnt
         FROM public.assignment_submissions asub
-        WHERE asub.status IN ('submitted', 'graded')
+        WHERE asub.status IN ('submitted', 'ai_grading', 'ai_graded', 'graded')
         GROUP BY asub.assignment_id
     ) s ON s.assignment_id = a.id
     LEFT JOIN (
@@ -812,6 +812,7 @@ DECLARE
     v_assignment public.assignments;
     v_total_students BIGINT;
     v_submitted BIGINT;
+    v_ai_graded BIGINT;
     v_graded BIGINT;
 BEGIN
     v_uid := public._assert_teacher();
@@ -829,12 +830,17 @@ BEGIN
     FROM public.course_enrollments
     WHERE course_id = v_assignment.course_id AND status = 'active';
 
-    -- 已提交数
+    -- 已提交数（含所有已提交后的状态）
     SELECT COUNT(*) INTO v_submitted
     FROM public.assignment_submissions
-    WHERE assignment_id = p_assignment_id AND status IN ('submitted', 'graded');
+    WHERE assignment_id = p_assignment_id AND status IN ('submitted', 'ai_grading', 'ai_graded', 'graded');
 
-    -- 已批改数
+    -- AI 已批待复核
+    SELECT COUNT(*) INTO v_ai_graded
+    FROM public.assignment_submissions
+    WHERE assignment_id = p_assignment_id AND status = 'ai_graded';
+
+    -- 已复核
     SELECT COUNT(*) INTO v_graded
     FROM public.assignment_submissions
     WHERE assignment_id = p_assignment_id AND status = 'graded';
@@ -843,6 +849,7 @@ BEGIN
         'total_students',    v_total_students,
         'submitted_count',   v_submitted,
         'not_submitted_count', v_total_students - v_submitted,
+        'ai_graded_count',   v_ai_graded,
         'graded_count',      v_graded,
         'submission_rate',   CASE WHEN v_total_students > 0
             THEN ROUND(v_submitted::NUMERIC / v_total_students * 100, 1)

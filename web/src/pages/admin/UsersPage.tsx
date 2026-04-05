@@ -34,6 +34,7 @@ import {
   updateAdminUser,
 } from "@/services/adminUsers";
 import { useAuthStore } from "@/store/authStore";
+import { toErrorMessage } from "@/lib/utils";
 import type {
   AdminAccountStatus,
   AdminUser,
@@ -94,13 +95,6 @@ const DEFAULT_QUERY_STATE: QueryState = {
   page: 1,
   pageSize: 20,
 };
-
-function toErrorMessage(error: unknown, fallback = "操作失败") {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return fallback;
-}
 
 function formatRoleLabel(role: AdminUserRole) {
   if (role === "teacher") {

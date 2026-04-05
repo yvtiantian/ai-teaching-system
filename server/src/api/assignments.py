@@ -1,10 +1,14 @@
-"""Assignments API — AI 题目生成端点"""
+"""Assignments API — AI 题目生成 & AI 批改端点"""
+
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.core.supabase_client import get_supabase_client
 from src.services.assignment_generator import generate_questions
+from src.services.assignment_grader import grade_submission
 
 router = APIRouter(prefix="/api/assignments", tags=["assignments"])
 
@@ -87,3 +91,65 @@ async def generate_assignment_questions(
         raise HTTPException(status_code=502, detail=str(exc))
 
     return result
+
+
+# ── AI 批改 ─────────────────────────────────────────────
+
+class GradeRequest(BaseModel):
+    submission_id: str
+
+
+@router.post("/grade")
+async def grade_submission_endpoint(
+    body: GradeRequest,
+    user_id: str = Depends(_get_current_user_id),
+):
+    """触发 AI 异步批改。\n\n
+    前端在 student_submit() 返回 has_subjective=true 后调用此接口。
+    批改以 asyncio background task 运行，接口立即返回。
+    """
+    # 校验 submission 存在且归属当前用户
+    import asyncio as _aio
+
+    sb = get_supabase_client()
+    result = await _aio.to_thread(
+        lambda: sb.table("assignment_submissions")
+        .select("id, student_id, status")
+        .eq("id", body.submission_id)
+        .maybe_single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="提交记录不存在")
+
+    sub = result.data
+    if sub["student_id"] != user_id:
+        raise HTTPException(status_code=403, detail="无权操作此提交")
+
+    if sub["status"] not in ("submitted", "ai_grading"):
+        raise HTTPException(status_code=400, detail="当前状态不允许批改")
+
+    # 后台异步执行 AI 批改
+    asyncio.create_task(_run_grading(body.submission_id))
+
+    return {"message": "AI 批改已启动", "submission_id": body.submission_id}
+
+
+async def _run_grading(submission_id: str) -> None:
+    """后台 AI 批改任务，捕获所有异常避免 unhandled error。"""
+    try:
+        result = await grade_submission(submission_id)
+        logger.info("AI 批改完成: {}", result)
+    except Exception as exc:
+        logger.error("AI 批改异常: submission={}, error={}", submission_id, exc)
+        # 即使失败也标记为 ai_graded，让教师可以手动处理
+        try:
+            sb = get_supabase_client()
+            await asyncio.to_thread(
+                lambda: sb.table("assignment_submissions")
+                .update({"status": "ai_graded", "updated_at": "now()"})
+                .eq("id", submission_id)
+                .execute()
+            )
+        except Exception:
+            logger.error("标记 ai_graded 也失败: submission={}", submission_id)
