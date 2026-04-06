@@ -63,6 +63,7 @@ interface AssignmentDetailRow {
   stats: {
     student_count: number;
     submitted_count: number;
+    auto_graded_count: number;
     ai_graded_count: number;
     graded_count: number;
     avg_score: number | null;
@@ -180,6 +181,7 @@ function toStats(s: AssignmentDetailRow["stats"]): AdminAssignmentStats {
   return {
     studentCount: Number(s.student_count) || 0,
     submittedCount: Number(s.submitted_count) || 0,
+    autoGradedCount: Number(s.auto_graded_count) || 0,
     aiGradedCount: Number(s.ai_graded_count) || 0,
     gradedCount: Number(s.graded_count) || 0,
     avgScore: s.avg_score != null ? Number(s.avg_score) : null,

@@ -39,6 +39,7 @@ function getDisplayStatus(
   if (sub === "graded") {
     return { label: record.teacherReviewed ? "已复核" : "已判分", color: "green" };
   }
+  if (sub === "auto_graded") return { label: "待复核", color: "cyan" };
   if (sub === "ai_graded") return { label: "待复核", color: "cyan" };
   if (sub === "ai_grading") return { label: "AI批改中", color: "orange" };
   if (sub === "submitted") return { label: "已提交", color: "orange" };
@@ -62,7 +63,7 @@ function canAnswer(record: StudentAssignment): boolean {
 /** 是否可以查看结果 */
 function canViewResult(record: StudentAssignment): boolean {
   const sub = record.submissionStatus;
-  return ["submitted", "ai_grading", "ai_graded", "graded"].includes(sub);
+  return ["submitted", "ai_grading", "auto_graded", "ai_graded", "graded"].includes(sub);
 }
 
 export default function StudentAssignmentsPage() {
@@ -174,7 +175,7 @@ export default function StudentAssignmentsPage() {
         render: (_: unknown, record: StudentAssignment) => {
           if (
             record.submissionScore != null &&
-            ["submitted", "ai_grading", "ai_graded", "graded"].includes(
+            ["submitted", "ai_grading", "auto_graded", "ai_graded", "graded"].includes(
               record.submissionStatus
             )
           ) {

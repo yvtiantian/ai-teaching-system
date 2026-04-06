@@ -812,6 +812,7 @@ DECLARE
     v_assignment public.assignments;
     v_total_students BIGINT;
     v_submitted BIGINT;
+    v_auto_graded BIGINT;
     v_ai_graded BIGINT;
     v_graded BIGINT;
 BEGIN
@@ -833,7 +834,12 @@ BEGIN
     -- 已提交数（含所有已提交后的状态）
     SELECT COUNT(*) INTO v_submitted
     FROM public.assignment_submissions
-    WHERE assignment_id = p_assignment_id AND status IN ('submitted', 'ai_grading', 'ai_graded', 'graded');
+    WHERE assignment_id = p_assignment_id AND status IN ('submitted', 'ai_grading', 'auto_graded', 'ai_graded', 'graded');
+
+    -- 自动判分待复核
+    SELECT COUNT(*) INTO v_auto_graded
+    FROM public.assignment_submissions
+    WHERE assignment_id = p_assignment_id AND status = 'auto_graded';
 
     -- AI 已批待复核
     SELECT COUNT(*) INTO v_ai_graded
@@ -846,12 +852,13 @@ BEGIN
     WHERE assignment_id = p_assignment_id AND status = 'graded';
 
     RETURN json_build_object(
-        'total_students',    v_total_students,
-        'submitted_count',   v_submitted,
+        'total_students',      v_total_students,
+        'submitted_count',     v_submitted,
         'not_submitted_count', v_total_students - v_submitted,
-        'ai_graded_count',   v_ai_graded,
-        'graded_count',      v_graded,
-        'submission_rate',   CASE WHEN v_total_students > 0
+        'auto_graded_count',   v_auto_graded,
+        'ai_graded_count',     v_ai_graded,
+        'graded_count',        v_graded,
+        'submission_rate',     CASE WHEN v_total_students > 0
             THEN ROUND(v_submitted::NUMERIC / v_total_students * 100, 1)
             ELSE 0
         END

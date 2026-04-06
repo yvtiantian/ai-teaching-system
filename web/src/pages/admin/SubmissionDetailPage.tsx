@@ -46,7 +46,8 @@ const STATUS_LABEL: Record<SubmissionStatus, { text: string; color: string }> = 
   in_progress: { text: "作答中", color: "processing" },
   submitted: { text: "已提交", color: "blue" },
   ai_grading: { text: "AI批改中", color: "processing" },
-  ai_graded: { text: "待复核", color: "orange" },
+  auto_graded: { text: "自动判分待复核", color: "geekblue" },
+  ai_graded: { text: "AI评分待复核", color: "orange" },
   graded: { text: "已批改", color: "green" },
 };
 

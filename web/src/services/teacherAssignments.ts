@@ -92,6 +92,7 @@ interface StatsRow {
   total_students: number;
   submitted_count: number;
   not_submitted_count: number;
+  auto_graded_count: number;
   ai_graded_count: number;
   graded_count: number;
   submission_rate: number;
@@ -202,6 +203,7 @@ function toStats(row: StatsRow): AssignmentStats {
     totalStudents: row.total_students,
     submittedCount: row.submitted_count,
     notSubmittedCount: row.not_submitted_count,
+    autoGradedCount: row.auto_graded_count ?? 0,
     aiGradedCount: row.ai_graded_count ?? 0,
     gradedCount: row.graded_count,
     submissionRate: row.submission_rate,

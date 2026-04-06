@@ -181,8 +181,9 @@ BEGIN
             WHERE ce.course_id = (SELECT course_id FROM public.assignments WHERE id = p_assignment_id)
               AND ce.status = 'active'
         ), 0),
-        'submitted_count',  COALESCE(SUM(CASE WHEN s.status IN ('submitted','ai_grading','ai_graded','graded') THEN 1 END), 0),
-        'ai_graded_count',  COALESCE(SUM(CASE WHEN s.status IN ('ai_graded','graded') THEN 1 END), 0),
+        'submitted_count',  COALESCE(SUM(CASE WHEN s.status IN ('submitted','ai_grading','auto_graded','ai_graded','graded') THEN 1 END), 0),
+        'auto_graded_count', COALESCE(SUM(CASE WHEN s.status = 'auto_graded' THEN 1 END), 0),
+        'ai_graded_count',  COALESCE(SUM(CASE WHEN s.status = 'ai_graded' THEN 1 END), 0),
         'graded_count',     COALESCE(SUM(CASE WHEN s.status = 'graded' THEN 1 END), 0),
         'avg_score',        ROUND(AVG(CASE WHEN s.status = 'graded' THEN s.total_score END)::numeric, 1),
         'max_score',        MAX(CASE WHEN s.status = 'graded' THEN s.total_score END),

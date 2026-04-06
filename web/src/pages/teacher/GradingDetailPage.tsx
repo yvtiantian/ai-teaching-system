@@ -49,7 +49,8 @@ const TYPE_LABEL: Record<QuestionType, string> = {
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {
   submitted: { text: "已提交", color: "orange" },
   ai_grading: { text: "AI批改中", color: "orange" },
-  ai_graded: { text: "待复核", color: "cyan" },
+  auto_graded: { text: "自动判分待复核", color: "geekblue" },
+  ai_graded: { text: "AI评分待复核", color: "cyan" },
   graded: { text: "已复核", color: "green" },
 };
 

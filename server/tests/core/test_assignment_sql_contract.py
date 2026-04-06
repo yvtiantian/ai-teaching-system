@@ -5,6 +5,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 FILL_BLANK_FIX_SQL = REPO_ROOT / "supabase" / "migrations" / "20260405_fix_fill_blank_auto_grading_regression.sql"
 STUDENT_REVIEW_STATUS_SQL = REPO_ROOT / "supabase" / "migrations" / "20260405_student_review_status_display_fix.sql"
 UNANSWERED_FIX_SQL = REPO_ROOT / "supabase" / "migrations" / "20260406_fix_unanswered_submission_visibility.sql"
+AUTO_GRADED_STATUS_SQL = REPO_ROOT / "supabase" / "migrations" / "20260406_add_auto_graded_status.sql"
 
 
 def test_student_submit_keeps_fill_blank_in_auto_grading_path() -> None:
@@ -52,4 +53,33 @@ def test_teacher_and_admin_detail_include_unanswered_questions() -> None:
     assert "WHERE aq.assignment_id = v_submission.assignment_id" in sql
     assert "CREATE OR REPLACE FUNCTION public.admin_get_submission_detail" in sql
     assert "WHERE q.assignment_id = (v_submission->>'assignment_id')::UUID" in sql
+
+
+def test_assignment_submissions_status_supports_auto_graded() -> None:
+    sql = AUTO_GRADED_STATUS_SQL.read_text(encoding="utf-8")
+
+    assert "CHECK (status IN ('not_started', 'in_progress', 'submitted', 'ai_grading', 'auto_graded', 'ai_graded', 'graded'))" in sql
+
+
+def test_student_submit_routes_reviewable_auto_scoring_to_auto_graded() -> None:
+    sql = AUTO_GRADED_STATUS_SQL.read_text(encoding="utf-8")
+
+    assert "v_has_reviewable_auto BOOLEAN := false;" in sql
+    assert "v_answer.question_type IN ('fill_blank', 'short_answer')" in sql
+    assert "ELSIF v_has_reviewable_auto THEN" in sql
+    assert "status       = 'auto_graded'" in sql
+
+
+def test_teacher_finalize_grading_accepts_auto_graded() -> None:
+    sql = AUTO_GRADED_STATUS_SQL.read_text(encoding="utf-8")
+
+    assert "IF v_submission.status NOT IN ('submitted', 'auto_graded', 'ai_graded') THEN" in sql
+
+
+def test_teacher_and_admin_stats_split_auto_graded_and_ai_graded() -> None:
+    sql = AUTO_GRADED_STATUS_SQL.read_text(encoding="utf-8")
+
+    assert "'auto_graded_count',   v_auto_graded" in sql
+    assert "status IN ('submitted', 'ai_grading', 'auto_graded', 'ai_graded', 'graded')" in sql
+    assert "'auto_graded_count',  COALESCE(SUM(CASE WHEN s.status = 'auto_graded' THEN 1 END), 0)" in sql
 

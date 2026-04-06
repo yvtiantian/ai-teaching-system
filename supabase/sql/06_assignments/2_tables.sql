@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS public.assignment_submissions (
     assignment_id   UUID NOT NULL REFERENCES public.assignments(id) ON DELETE CASCADE,
     student_id      UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     status          TEXT NOT NULL DEFAULT 'not_started'
-                    CHECK (status IN ('not_started', 'in_progress', 'submitted', 'graded')),
+                    CHECK (status IN ('not_started', 'in_progress', 'submitted', 'ai_grading', 'auto_graded', 'ai_graded', 'graded')),
     submitted_at    TIMESTAMPTZ,
     total_score     NUMERIC,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),

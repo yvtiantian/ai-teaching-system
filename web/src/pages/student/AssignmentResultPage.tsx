@@ -34,6 +34,7 @@ const STATUS_LABEL: Record<Exclude<SubmissionStatus, "graded">, { text: string; 
   in_progress: { text: "答题中", color: "blue" },
   submitted: { text: "已提交", color: "orange" },
   ai_grading: { text: "AI批改中", color: "orange" },
+  auto_graded: { text: "待复核", color: "cyan" },
   ai_graded: { text: "待复核", color: "cyan" },
 };
 

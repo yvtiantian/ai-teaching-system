@@ -81,6 +81,7 @@ export interface AssignmentStats {
   totalStudents: number;
   submittedCount: number;
   notSubmittedCount: number;
+  autoGradedCount: number;
   aiGradedCount: number;
   gradedCount: number;
   submissionRate: number;
@@ -137,6 +138,7 @@ export type SubmissionStatus =
   | "in_progress"
   | "submitted"
   | "ai_grading"
+  | "auto_graded"
   | "ai_graded"
   | "graded";
 
@@ -192,7 +194,7 @@ export interface SavedAnswer {
   answer: unknown;
 }
 
-/** student_submit 返回 */
+/** student_submit 返回：hasSubjective 表示仍有需要 AI 处理的简答题 */
 export interface SubmitResult {
   submittedAt: string;
   autoScore: number;
@@ -298,6 +300,7 @@ export interface AdminAssignmentListResult {
 export interface AdminAssignmentStats {
   studentCount: number;
   submittedCount: number;
+  autoGradedCount: number;
   aiGradedCount: number;
   gradedCount: number;
   avgScore: number | null;

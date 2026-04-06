@@ -278,7 +278,7 @@ export default function StudentAssignmentAnswerPage() {
           message.success(
             `作业已提交！客观题得分 ${result.autoScore} 分`
           );
-          // 仅含简答题时触发 AI 异步批改
+          // 仅存在待 AI 处理的简答题时触发异步批改
           if (result.hasSubjective) {
             void triggerAiGrading(submissionId);
           }
