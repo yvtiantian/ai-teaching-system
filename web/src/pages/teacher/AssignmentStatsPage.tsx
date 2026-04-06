@@ -32,7 +32,7 @@ const STATUS_TAG: Record<string, { label: string; color: string }> = {
   in_progress: { label: "作答中", color: "processing" },
   submitted: { label: "已提交", color: "green" },
   ai_grading: { label: "AI批改中", color: "orange" },
-  ai_graded: { label: "AI已批", color: "cyan" },
+  ai_graded: { label: "待复核", color: "cyan" },
   graded: { label: "已复核", color: "blue" },
 };
 
@@ -185,7 +185,7 @@ export default function AssignmentStatsPage() {
             <Statistic title="未提交" value={stats.notSubmittedCount} />
           </Card>
           <Card size="small">
-            <Statistic title="AI已批/待复核" value={stats.aiGradedCount} valueStyle={{ color: stats.aiGradedCount > 0 ? "#0891b2" : undefined }} />
+            <Statistic title="待复核" value={stats.aiGradedCount} valueStyle={{ color: stats.aiGradedCount > 0 ? "#0891b2" : undefined }} />
           </Card>
           <Card size="small">
             <Statistic
@@ -215,7 +215,7 @@ export default function AssignmentStatsPage() {
           {[
             { value: undefined, label: "全部" },
             { value: "submitted", label: "已提交" },
-            { value: "ai_graded", label: "AI已批" },
+            { value: "ai_graded", label: "待复核" },
             { value: "not_started", label: "未提交" },
             { value: "graded", label: "已复核" },
           ].map((item) => (

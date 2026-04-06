@@ -20,6 +20,7 @@ import "dayjs/locale/zh-cn";
 import { useParams, useNavigate } from "react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CommonTable from "@/components/CommonTable/CommonTable";
+import { getCourseStatusTagInfo } from "@/lib/courseStatus";
 import { getRoleRedirectPath } from "@/lib/profile";
 import {
   adminGetCourseDetail,
@@ -197,10 +198,11 @@ export default function AdminCourseDetailPage() {
 
       <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
         <Descriptions.Item label="课程名称">{detail.courseName}</Descriptions.Item>
-        <Descriptions.Item label="状态">
-          <Tag color={detail.courseStatus === "active" ? "green" : "default"}>
-            {detail.courseStatus === "active" ? "进行中" : "已归档"}
-          </Tag>
+        <Descriptions.Item label="课程状态">
+          {(() => {
+            const info = getCourseStatusTagInfo(detail.courseStatus);
+            return <Tag color={info.color}>{info.label}</Tag>;
+          })()}
         </Descriptions.Item>
         <Descriptions.Item label="课程码">
           <Typography.Text code className="text-base tracking-widest">

@@ -1,8 +1,9 @@
 import {
   ArrowLeftOutlined,
   CheckCircleFilled,
+  ClockCircleFilled,
   CloseCircleFilled,
-  MinusCircleFilled,
+  FileTextFilled,
 } from "@ant-design/icons";
 import {
   Button,
@@ -28,14 +29,26 @@ import type {
 
 dayjs.locale("zh-cn");
 
-const STATUS_LABEL: Record<SubmissionStatus, { text: string; color: string }> = {
+const STATUS_LABEL: Record<Exclude<SubmissionStatus, "graded">, { text: string; color: string }> = {
   not_started: { text: "未作答", color: "default" },
   in_progress: { text: "答题中", color: "blue" },
   submitted: { text: "已提交", color: "orange" },
   ai_grading: { text: "AI批改中", color: "orange" },
-  ai_graded: { text: "AI已批", color: "cyan" },
-  graded: { text: "已复核", color: "green" },
+  ai_graded: { text: "待复核", color: "cyan" },
 };
+
+function getSubmissionStatusLabel(
+  status: SubmissionStatus,
+  teacherReviewed: boolean
+): { text: string; color: string } {
+  if (status === "graded") {
+    return teacherReviewed
+      ? { text: "已复核", color: "green" }
+      : { text: "已判分", color: "green" };
+  }
+
+  return STATUS_LABEL[status];
+}
 
 function formatAnswer(answer: unknown, questionType: QuestionType): string {
   if (answer == null) return "（未作答）";
@@ -83,12 +96,52 @@ function formatCorrectAnswer(
   }
 }
 
-function ScoreIcon({ isCorrect }: { isCorrect: boolean | null }) {
-  if (isCorrect === true)
-    return <CheckCircleFilled className="text-green-500" />;
-  if (isCorrect === false)
-    return <CloseCircleFilled className="text-red-500" />;
-  return <MinusCircleFilled className="text-gray-400" />;
+function AnswerStatusTag({
+  isCorrect,
+  questionType,
+  status,
+}: {
+  isCorrect: boolean | null;
+  questionType: QuestionType;
+  status: SubmissionStatus;
+}) {
+  if (isCorrect === true) {
+    return (
+      <Tag color="success" icon={<CheckCircleFilled />}>
+        回答正确
+      </Tag>
+    );
+  }
+
+  if (isCorrect === false) {
+    return (
+      <Tag color="error" icon={<CloseCircleFilled />}>
+        回答有误
+      </Tag>
+    );
+  }
+
+  if (questionType === "short_answer") {
+    if (status === "graded") {
+      return (
+        <Tag color="processing" icon={<FileTextFilled />}>
+          已评阅
+        </Tag>
+      );
+    }
+
+    return (
+      <Tag color="warning" icon={<ClockCircleFilled />}>
+        待复核
+      </Tag>
+    );
+  }
+
+  return (
+    <Tag color="default" icon={<ClockCircleFilled />}>
+      待判定
+    </Tag>
+  );
 }
 
 export default function StudentAssignmentResultPage() {
@@ -174,7 +227,7 @@ export default function StudentAssignmentResultPage() {
     );
   }
 
-  const statusInfo = STATUS_LABEL[result.submissionStatus];
+  const statusInfo = getSubmissionStatusLabel(result.submissionStatus, result.teacherReviewed);
   const isPolling = result.submissionStatus === "submitted" || result.submissionStatus === "ai_grading";
 
   return (
@@ -256,10 +309,14 @@ function AnswerCard({
         <Tag color="blue">第 {index} 题</Tag>
         <Tag>{QUESTION_TYPE_LABEL[answer.questionType]}</Tag>
         <Space>
-          <ScoreIcon isCorrect={answer.isCorrect} />
           <span className="font-medium">
             {answer.score} / {answer.maxScore} 分
           </span>
+          <AnswerStatusTag
+            isCorrect={answer.isCorrect}
+            questionType={answer.questionType}
+            status={status}
+          />
         </Space>
       </div>
 

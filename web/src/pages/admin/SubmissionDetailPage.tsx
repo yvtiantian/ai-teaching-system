@@ -19,6 +19,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useParams, useNavigate } from "react-router";
 import { useCallback, useEffect, useState } from "react";
+import { getGradingSourceTagInfo } from "@/lib/assignmentGrading";
 import { getRoleRedirectPath } from "@/lib/profile";
 import { adminGetSubmissionDetail } from "@/services/adminAssignments";
 import { useAuthStore } from "@/store/authStore";
@@ -45,16 +46,8 @@ const STATUS_LABEL: Record<SubmissionStatus, { text: string; color: string }> = 
   in_progress: { text: "作答中", color: "processing" },
   submitted: { text: "已提交", color: "blue" },
   ai_grading: { text: "AI批改中", color: "processing" },
-  ai_graded: { text: "AI已批改", color: "orange" },
+  ai_graded: { text: "待复核", color: "orange" },
   graded: { text: "已批改", color: "green" },
-};
-
-const GRADED_BY_LABEL: Record<string, { text: string; color: string }> = {
-  auto: { text: "自动", color: "blue" },
-  ai: { text: "AI评", color: "cyan" },
-  teacher: { text: "已复核", color: "green" },
-  pending: { text: "待评", color: "default" },
-  fallback: { text: "需手评", color: "orange" },
 };
 
 function formatAnswer(answer: unknown, questionType: QuestionType): string {
@@ -234,7 +227,10 @@ function ReadonlyAnswerCard({
   index: number;
   answer: AdminSubmissionAnswer;
 }) {
-  const gradedInfo = GRADED_BY_LABEL[answer.gradedBy] ?? { text: answer.gradedBy, color: "default" };
+  const gradedInfo = getGradingSourceTagInfo({
+    gradedBy: answer.gradedBy,
+    questionType: answer.questionType,
+  });
 
   return (
     <Card
@@ -246,7 +242,7 @@ function ReadonlyAnswerCard({
           <span>
             第 {index} 题 · {TYPE_LABEL[answer.questionType] || answer.questionType}
           </span>
-          <Tag color={gradedInfo.color} className="ml-1">
+          <Tag color={gradedInfo.color} icon={gradedInfo.icon} className="ml-1">
             {gradedInfo.text}
           </Tag>
           <span className="ml-auto text-base font-semibold">

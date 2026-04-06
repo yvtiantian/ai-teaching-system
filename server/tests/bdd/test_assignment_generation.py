@@ -93,6 +93,33 @@ def teacher_set_prompt(ctx: BDDContext, prompt: str):
     ctx.ai_prompt = prompt
 
 
+@given("AI 实际返回了不符合配置的混合题型")
+def ai_returns_mixed_types(ctx: BDDContext):
+    ctx.mock_ai_response = {
+        "questions": [
+            {
+                "question_type": "fill_blank",
+                "content": "测试填空题_1",
+                "options": None,
+                "correct_answer": {"answer": ["答案1"]},
+                "explanation": "填空解析1",
+            },
+            {
+                "question_type": "single_choice",
+                "content": "测试单选题_1",
+                "options": [
+                    {"label": "A", "text": "选项A"},
+                    {"label": "B", "text": "选项B"},
+                    {"label": "C", "text": "选项C"},
+                    {"label": "D", "text": "选项D"},
+                ],
+                "correct_answer": {"answer": "A"},
+                "explanation": "单选解析1",
+            },
+        ]
+    }
+
+
 # ── 执行生成 (When) ───────────────────────────────────────
 
 
@@ -102,7 +129,7 @@ def teacher_requests_generation(ctx: BDDContext):
     from tests.bdd.conftest import _FakeSupabaseClient
 
     # 构建 mock DeepSeek 响应
-    mock_ai_response = build_mock_deepseek_response(ctx.question_config)
+    mock_ai_response = ctx.mock_ai_response or build_mock_deepseek_response(ctx.question_config)
     mock_json_str = json.dumps(mock_ai_response, ensure_ascii=False)
 
     fake_sb = _FakeSupabaseClient(

@@ -31,6 +31,44 @@ _TYPE_LABELS: dict[str, str] = {
     "short_answer": "简答题",
 }
 
+_EXAMPLE_BY_TYPE: dict[str, str] = {
+        "single_choice": """    {
+            \"question_type\": \"single_choice\",
+            \"content\": \"题目正文\",
+            \"options\": [{\"label\": \"A\", \"text\": \"选项内容\"}, {\"label\": \"B\", \"text\": \"...\"}, {\"label\": \"C\", \"text\": \"...\"}, {\"label\": \"D\", \"text\": \"...\"}],
+            \"correct_answer\": {\"answer\": \"B\"},
+            \"explanation\": \"答案解析\"
+        }""",
+        "multiple_choice": """    {
+            \"question_type\": \"multiple_choice\",
+            \"content\": \"题目正文\",
+            \"options\": [{\"label\": \"A\", \"text\": \"...\"}, {\"label\": \"B\", \"text\": \"...\"}, {\"label\": \"C\", \"text\": \"...\"}, {\"label\": \"D\", \"text\": \"...\"}],
+            \"correct_answer\": {\"answer\": [\"A\", \"C\"]},
+            \"explanation\": \"答案解析\"
+        }""",
+        "fill_blank": """    {
+            \"question_type\": \"fill_blank\",
+            \"content\": \"____是Python的内置数据类型。\",
+            \"options\": null,
+            \"correct_answer\": {\"answer\": [\"dict\"], \"acceptable\": [\"字典\"]},
+            \"explanation\": \"答案解析\"
+        }""",
+        "true_false": """    {
+            \"question_type\": \"true_false\",
+            \"content\": \"Python是编译型语言。\",
+            \"options\": null,
+            \"correct_answer\": {\"answer\": false},
+            \"explanation\": \"答案解析\"
+        }""",
+        "short_answer": """    {
+            \"question_type\": \"short_answer\",
+            \"content\": \"简述Python中列表和元组的区别。\",
+            \"options\": null,
+            \"correct_answer\": {\"answer\": \"参考答案文本\"},
+            \"explanation\": \"答案解析\"
+        }""",
+}
+
 # ── Prompt 模板 ───────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
@@ -48,6 +86,9 @@ _USER_PROMPT_TEMPLATE = """\
 【出题要求】
 {requirements}
 
+【题型约束】
+{type_constraints}
+
 【质量要求】
 - 题目难度适中，覆盖参考资料的核心知识点
 - 选项设计合理，干扰项具有迷惑性但不能有歧义
@@ -60,41 +101,7 @@ _USER_PROMPT_TEMPLATE = """\
 请输出严格的 JSON，格式如下:
 {{
   "questions": [
-    {{
-      "question_type": "single_choice",
-      "content": "题目正文",
-      "options": [{{"label": "A", "text": "选项内容"}}, {{"label": "B", "text": "..."}}, {{"label": "C", "text": "..."}}, {{"label": "D", "text": "..."}}],
-      "correct_answer": {{"answer": "B"}},
-      "explanation": "答案解析"
-    }},
-    {{
-      "question_type": "multiple_choice",
-      "content": "题目正文",
-      "options": [{{"label": "A", "text": "..."}}, {{"label": "B", "text": "..."}}, {{"label": "C", "text": "..."}}, {{"label": "D", "text": "..."}}],
-      "correct_answer": {{"answer": ["A", "C"]}},
-      "explanation": "答案解析"
-    }},
-    {{
-      "question_type": "fill_blank",
-      "content": "____是Python的内置数据类型。",
-      "options": null,
-      "correct_answer": {{"answer": ["dict"], "acceptable": ["字典"]}},
-      "explanation": "答案解析"
-    }},
-    {{
-      "question_type": "true_false",
-      "content": "Python是编译型语言。",
-      "options": null,
-      "correct_answer": {{"answer": false}},
-      "explanation": "答案解析"
-    }},
-    {{
-      "question_type": "short_answer",
-      "content": "简述Python中列表和元组的区别。",
-      "options": null,
-      "correct_answer": {{"answer": "参考答案文本"}},
-      "explanation": "答案解析"
-    }}
+{output_examples}
   ]
 }}
 
@@ -123,6 +130,32 @@ def _build_requirements(question_config: dict[str, Any]) -> str:
         elif qtype == "short_answer":
             lines.append(f"- {label} {count} 道：需要简要分析作答")
     return "\n".join(lines) if lines else "（未指定题型要求）"
+
+
+def _get_selected_types(question_config: dict[str, Any]) -> list[str]:
+    selected = [
+        qtype
+        for qtype, cfg in question_config.items()
+        if int((cfg or {}).get("count", 0)) > 0 and qtype in _EXAMPLE_BY_TYPE
+    ]
+    return selected or list(_EXAMPLE_BY_TYPE.keys())
+
+
+def _build_type_constraints(question_config: dict[str, Any]) -> str:
+    selected = _get_selected_types(question_config)
+    type_labels = "、".join(_TYPE_LABELS[qtype] for qtype in selected)
+    return "\n".join(
+        [
+            f"- 只允许输出以下题型: {type_labels}",
+            "- 严禁输出未请求的题型",
+            "- 每种题型的数量必须严格匹配出题要求",
+        ]
+    )
+
+
+def _build_output_examples(question_config: dict[str, Any]) -> str:
+    selected = _get_selected_types(question_config)
+    return ",\n".join(_EXAMPLE_BY_TYPE[qtype] for qtype in selected)
 
 
 async def _download_file(storage_path: str) -> tuple[bytes, str]:
@@ -200,6 +233,38 @@ def _validate_questions(questions: list[dict]) -> list[str]:
     return errors
 
 
+def _validate_question_distribution(
+    questions: list[dict], question_config: dict[str, Any]
+) -> list[str]:
+    """校验生成题目的题型分布是否与请求配置完全一致。"""
+    errors: list[str] = []
+    expected_counts = {
+        qtype: int((cfg or {}).get("count", 0))
+        for qtype, cfg in question_config.items()
+        if int((cfg or {}).get("count", 0)) > 0
+    }
+    actual_counts: dict[str, int] = {}
+
+    for question in questions:
+        qtype = question.get("question_type")
+        if not isinstance(qtype, str):
+            continue
+        actual_counts[qtype] = actual_counts.get(qtype, 0) + 1
+
+    for qtype, expected in expected_counts.items():
+        actual = actual_counts.get(qtype, 0)
+        if actual != expected:
+            label = _TYPE_LABELS.get(qtype, qtype)
+            errors.append(f"题型分布不符合要求: {label} 期望 {expected} 道，实际 {actual} 道")
+
+    for qtype, actual in actual_counts.items():
+        if qtype not in expected_counts:
+            label = _TYPE_LABELS.get(qtype, qtype)
+            errors.append(f"题型分布不符合要求: 不应生成 {label}，但实际生成了 {actual} 道")
+
+    return errors
+
+
 async def generate_questions(
     *,
     title: str,
@@ -249,7 +314,9 @@ async def generate_questions(
         title=title,
         description_block=description_block,
         requirements=_build_requirements(question_config),
+        type_constraints=_build_type_constraints(question_config),
         custom_prompt=custom_prompt,
+        output_examples=_build_output_examples(question_config),
     )
 
     # 3. 调用 DeepSeek
@@ -262,6 +329,7 @@ async def generate_questions(
             raw = await _call_deepseek(user_prompt)
             parsed = _parse_response(raw)
             validation_errors = _validate_questions(parsed)
+            validation_errors.extend(_validate_question_distribution(parsed, question_config))
             if validation_errors:
                 last_error = "; ".join(validation_errors)
                 logger.warning("生成校验失败 (尝试 {}/{}): {}", attempt, max_retries, last_error)

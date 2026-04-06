@@ -223,6 +223,7 @@ export default function TeacherAssignmentsPage() {
         title: "作业标题",
         dataIndex: "title",
         ellipsis: true,
+        width: 240
       },
       {
         title: "状态",

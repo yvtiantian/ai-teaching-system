@@ -416,10 +416,12 @@ export async function generateAssignmentQuestions(
     description: payload.description ?? null,
     file_paths: payload.filePaths,
     question_config: Object.fromEntries(
-      Object.entries(payload.questionConfig).map(([k, v]) => [
-        k,
-        { count: v!.count, score_per_question: v!.scorePerQuestion },
-      ])
+      Object.entries(payload.questionConfig)
+        .filter(([, v]) => (v?.count ?? 0) > 0)
+        .map(([k, v]) => [
+          k,
+          { count: v!.count, score_per_question: v!.scorePerQuestion },
+        ])
     ),
     ai_prompt: payload.aiPrompt ?? null,
   };
@@ -472,7 +474,7 @@ interface SubmissionDetailRow {
 }
 
 interface SubmissionDetailAnswerRow {
-  answer_id: string;
+  answer_id: string | null;
   question_id: string;
   question_type: string;
   sort_order: number;
@@ -493,7 +495,7 @@ interface SubmissionDetailAnswerRow {
 
 function toSubmissionDetailAnswer(row: SubmissionDetailAnswerRow): SubmissionDetailAnswer {
   return {
-    answerId: row.answer_id,
+    answerId: row.answer_id ?? null,
     questionId: row.question_id,
     questionType: row.question_type as QuestionType,
     sortOrder: row.sort_order,

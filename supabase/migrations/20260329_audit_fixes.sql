@@ -57,15 +57,15 @@ BEGIN
         RAISE EXCEPTION '作业已截止，无法提交';
     END IF;
 
-    -- 逐题批改客观题
+    -- 逐题批改客观题（含填空题）
     FOR v_answer IN
         SELECT sa.*, aq.question_type, aq.correct_answer, aq.score AS max_score
         FROM public.student_answers sa
         JOIN public.assignment_questions aq ON aq.id = sa.question_id
         WHERE sa.submission_id = p_submission_id
     LOOP
-        IF v_answer.question_type IN ('single_choice', 'multiple_choice', 'true_false') THEN
-            -- 精确匹配
+        IF v_answer.question_type IN ('single_choice', 'multiple_choice', 'true_false', 'fill_blank') THEN
+            -- 精确匹配（含填空题）
             SELECT g.score, g.is_correct INTO v_grade
             FROM public._auto_grade_answer(
                 v_answer.question_type,
@@ -83,7 +83,7 @@ BEGIN
 
             v_auto_score := v_auto_score + v_grade.score;
         ELSE
-            -- 填空 / 简答：标记等待 AI
+            -- 仅简答题标记等待 AI
             v_has_subjective := true;
         END IF;
     END LOOP;

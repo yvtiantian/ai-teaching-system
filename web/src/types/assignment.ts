@@ -152,6 +152,7 @@ export interface StudentAssignment {
   totalScore: number;
   questionCount: number;
   submissionStatus: SubmissionStatus;
+  teacherReviewed: boolean;
   submissionScore: number | null;
   submittedAt: string | null;
   createdAt: string;
@@ -226,6 +227,7 @@ export interface AssignmentResult {
   totalScore: number;
   submissionId: string;
   submissionStatus: SubmissionStatus;
+  teacherReviewed: boolean;
   submittedAt: string;
   studentScore: number | null;
   answers: AnswerResult[];
@@ -234,7 +236,7 @@ export interface AssignmentResult {
 // ── 教师复核/阅卷类型 ─────────────────────────────────────
 
 export interface SubmissionDetailAnswer {
-  answerId: string;
+  answerId: string | null;
   questionId: string;
   questionType: QuestionType;
   sortOrder: number;

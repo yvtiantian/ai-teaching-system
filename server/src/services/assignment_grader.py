@@ -95,6 +95,27 @@ async def grade_submission(submission_id: str) -> dict[str, Any]:
     # 建立 question_id → question 映射
     q_map: dict[str, dict] = {str(q["id"]): q for q in questions}
 
+    pending_short_answers = [
+        ans
+        for ans in answers
+        if (q_map.get(str(ans["question_id"])) or {}).get("question_type") == "short_answer"
+        and ans.get("graded_by") != "auto"
+        and _has_meaningful_short_answer(ans.get("answer"))
+    ]
+
+    # 没有需要 AI 处理的主观题时，直接完成结算，避免空白答案被再次送去 AI。
+    if not pending_short_answers:
+        final_total = sum(float(a.get("score") or 0) for a in answers)
+        await _mark_submission_graded(sb, submission_id, final_total)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        return {
+            "submission_id": submission_id,
+            "graded_count": 0,
+            "failed_count": 0,
+            "total_score": final_total,
+            "elapsed_ms": elapsed_ms,
+        }
+
     # 2. 标记 ai_grading
     await _update_submission_status(sb, submission_id, "ai_grading")
 
@@ -112,6 +133,10 @@ async def grade_submission(submission_id: str) -> dict[str, Any]:
 
         # 仅简答题需要 AI 批改，其他题型已由 SQL 自动评分
         if question["question_type"] != "short_answer":
+            continue
+
+        # 未作答或仅空格的主观题已在 student_submit 阶段按错误计 0 分，这里直接跳过。
+        if ans.get("graded_by") == "auto" or not _has_meaningful_short_answer(ans.get("answer")):
             continue
 
         try:
@@ -172,18 +197,18 @@ async def _grade_short_answer(
     """简答题：调用 AI 按 4 维度评分。"""
     correct = question.get("correct_answer") or {}
     correct_answer = correct.get("answer", "")
-    student_ans = (answer.get("answer") or {})
-    student_answer = student_ans.get("answer", "") if isinstance(student_ans, dict) else ""
+    student_ans = answer.get("answer")
+    student_answer = _extract_short_answer_text(student_ans)
     max_score = float(question.get("score", 0))
 
-    if not student_answer or not str(student_answer).strip():
+    if not student_answer:
         return {
             "score": 0,
             "is_correct": False,
-            "ai_score": 0,
-            "ai_feedback": "未作答",
+            "ai_score": None,
+            "ai_feedback": None,
             "ai_detail": None,
-            "graded_by": "ai",
+            "graded_by": "auto",
         }
 
     prompt = _SHORT_ANSWER_PROMPT.format(
@@ -237,6 +262,19 @@ def _fallback_result(question: dict, answer: dict) -> dict[str, Any]:
         "ai_detail": None,
         "graded_by": "fallback",
     }
+
+
+def _extract_short_answer_text(answer: Any) -> str:
+    if isinstance(answer, dict):
+        value = answer.get("answer")
+        return value.strip() if isinstance(value, str) else ""
+    if isinstance(answer, str):
+        return answer.strip()
+    return ""
+
+
+def _has_meaningful_short_answer(answer: Any) -> bool:
+    return bool(_extract_short_answer_text(answer))
 
 
 # ══════════════════════════════════════════════════════════
@@ -370,6 +408,19 @@ async def _finalize_submission(sb: Any, submission_id: str, total_score: float) 
         lambda: sb.table("assignment_submissions")
         .update({
             "status": "ai_graded",
+            "total_score": total_score,
+            "updated_at": "now()",
+        })
+        .eq("id", submission_id)
+        .execute()
+    )
+
+
+async def _mark_submission_graded(sb: Any, submission_id: str, total_score: float) -> None:
+    await asyncio.to_thread(
+        lambda: sb.table("assignment_submissions")
+        .update({
+            "status": "graded",
             "total_score": total_score,
             "updated_at": "now()",
         })

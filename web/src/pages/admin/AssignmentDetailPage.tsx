@@ -50,14 +50,14 @@ const SUBMISSION_STATUS_TAG: Record<SubmissionStatus, { color: string; label: st
   in_progress: { color: "processing", label: "作答中" },
   submitted: { color: "blue", label: "已提交" },
   ai_grading: { color: "processing", label: "AI批改中" },
-  ai_graded: { color: "orange", label: "AI已批改" },
+  ai_graded: { color: "orange", label: "待复核" },
   graded: { color: "green", label: "已批改" },
 };
 
 const SUBMISSION_STATUS_OPTIONS: Array<{ label: string; value: SubmissionStatus }> = [
   { label: "已提交", value: "submitted" },
   { label: "AI批改中", value: "ai_grading" },
-  { label: "AI已批改", value: "ai_graded" },
+  { label: "待复核", value: "ai_graded" },
   { label: "已批改", value: "graded" },
 ];
 
@@ -296,7 +296,7 @@ export default function AdminAssignmentDetailPage() {
                     <Statistic title="已提交" value={stats.submittedCount} />
                   </Card>
                   <Card size="small">
-                    <Statistic title="AI已批改" value={stats.aiGradedCount} />
+                    <Statistic title="待复核" value={stats.aiGradedCount} />
                   </Card>
                   <Card size="small">
                     <Statistic title="已批改" value={stats.gradedCount} />

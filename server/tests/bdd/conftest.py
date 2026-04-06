@@ -139,6 +139,7 @@ class BDDContext:
     # 题目配置
     question_config: dict[str, dict[str, Any]] = field(default_factory=dict)
     ai_prompt: str | None = None
+    mock_ai_response: dict[str, Any] | None = None
 
     # 结果
     response: Any = None

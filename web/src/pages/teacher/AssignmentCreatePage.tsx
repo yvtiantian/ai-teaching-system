@@ -17,6 +17,7 @@ import {
   Space,
   Spin,
   Steps,
+  Switch,
   Tag,
   Typography,
   Upload,
@@ -68,6 +69,14 @@ const DEFAULT_AI_PROMPT = `请确保题目:
 - 每道题附带答案解析
 - 题目不重复或过于相似`;
 
+const DEFAULT_QUESTION_CONFIG: QuestionConfig = {
+  single_choice: { count: 0, scorePerQuestion: 2 },
+  multiple_choice: { count: 0, scorePerQuestion: 4 },
+  fill_blank: { count: 0, scorePerQuestion: 3 },
+  true_false: { count: 0, scorePerQuestion: 2 },
+  short_answer: { count: 0, scorePerQuestion: 10 },
+};
+
 interface BasicInfo {
   title: string;
   description: string;
@@ -98,13 +107,7 @@ function CreateAssignmentInner() {
   const [uploadedPaths, setUploadedPaths] = useState<string[]>([]);
 
   // Step 3: 题目配置
-  const [questionConfig, setQuestionConfig] = useState<QuestionConfig>({
-    single_choice: { count: 5, scorePerQuestion: 2 },
-    multiple_choice: { count: 3, scorePerQuestion: 4 },
-    fill_blank: { count: 2, scorePerQuestion: 3 },
-    true_false: { count: 5, scorePerQuestion: 2 },
-    short_answer: { count: 0, scorePerQuestion: 10 },
-  });
+  const [questionConfig, setQuestionConfig] = useState<QuestionConfig>(DEFAULT_QUESTION_CONFIG);
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_AI_PROMPT);
   const [generating, setGenerating] = useState(false);
 
@@ -646,14 +649,46 @@ function StepQuestionConfig({
     }));
   };
 
+  const toggleType = (type: QuestionType, enabled: boolean) => {
+    setConfig((prev) => {
+      const current = prev[type] ?? DEFAULT_QUESTION_CONFIG[type]!;
+      if (!enabled) {
+        return {
+          ...prev,
+          [type]: { ...current, count: 0 },
+        };
+      }
+
+      return {
+        ...prev,
+        [type]: {
+          ...current,
+          count: current.count > 0 ? current.count : 1,
+          scorePerQuestion:
+            current.scorePerQuestion > 0
+              ? current.scorePerQuestion
+              : DEFAULT_QUESTION_CONFIG[type]!.scorePerQuestion,
+        },
+      };
+    });
+  };
+
   return (
     <Card>
       <div className="space-y-3">
+        <Typography.Text type="secondary" className="block text-sm">
+          仅启用的题型会参与本次生成。若只需某一种题型，请关闭其它题型。
+        </Typography.Text>
         {types.map((type) => {
           const cfg = config[type] ?? { count: 0, scorePerQuestion: 0 };
+          const enabled = cfg.count > 0;
           return (
-            <div key={type} className="flex items-center gap-4">
-              <span className="w-16 shrink-0 text-sm">{QUESTION_TYPE_LABELS[type]}</span>
+            <div key={type} className="flex items-center gap-4 rounded-lg border border-gray-100 px-3 py-2">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <Switch checked={enabled} onChange={(checked) => toggleType(type, checked)} />
+                <span className="w-16 shrink-0 text-sm">{QUESTION_TYPE_LABELS[type]}</span>
+                {!enabled && <Tag color="default">未启用</Tag>}
+              </div>
               <InputNumber
                 min={0}
                 max={50}
@@ -662,6 +697,7 @@ function StepQuestionConfig({
                 addonAfter="题"
                 className="w-28"
                 size="small"
+                disabled={!enabled}
               />
               <InputNumber
                 min={0}
@@ -671,6 +707,7 @@ function StepQuestionConfig({
                 addonAfter="分/题"
                 className="w-32"
                 size="small"
+                disabled={!enabled}
               />
             </div>
           );

@@ -23,6 +23,7 @@ import "dayjs/locale/zh-cn";
 import { useNavigate } from "react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CommonTable from "@/components/CommonTable/CommonTable";
+import { getCourseStatusTagInfo } from "@/lib/courseStatus";
 import { getRoleRedirectPath } from "@/lib/profile";
 import {
   teacherArchiveCourse,
@@ -223,14 +224,13 @@ export default function TeacherCoursesPage() {
         align: "center",
       },
       {
-        title: "状态",
+        title: "课程状态",
         dataIndex: "status",
         width: 100,
-        render: (status: CourseStatus) => (
-          <Tag color={status === "active" ? "green" : "default"}>
-            {status === "active" ? "进行中" : "已归档"}
-          </Tag>
-        ),
+        render: (status: CourseStatus) => {
+          const info = getCourseStatusTagInfo(status);
+          return <Tag color={info.color}>{info.label}</Tag>;
+        },
       },
       {
         title: "创建时间",

@@ -24,6 +24,7 @@ interface StudentAssignmentRow {
   total_score: number;
   question_count: number | string;
   submission_status: string;
+  teacher_reviewed: boolean | null;
   submission_score: number | null;
   submitted_at: string | null;
   created_at: string;
@@ -104,6 +105,7 @@ interface AssignmentResultRow {
   total_score: number;
   submission_id: string;
   submission_status: string;
+  teacher_reviewed: boolean | null;
   submitted_at: string;
   student_score: number | null;
   answers: AnswerResultRow[];
@@ -123,6 +125,7 @@ function toStudentAssignment(row: StudentAssignmentRow): StudentAssignment {
     totalScore: Number(row.total_score) || 0,
     questionCount: Number(row.question_count) || 0,
     submissionStatus: (row.submission_status || "not_started") as SubmissionStatus,
+    teacherReviewed: Boolean(row.teacher_reviewed),
     submissionScore: row.submission_score,
     submittedAt: row.submitted_at,
     createdAt: row.created_at,
@@ -191,6 +194,7 @@ function toAssignmentResult(row: AssignmentResultRow): AssignmentResult {
     totalScore: Number(row.total_score) || 0,
     submissionId: row.submission_id,
     submissionStatus: (row.submission_status || "submitted") as SubmissionStatus,
+    teacherReviewed: Boolean(row.teacher_reviewed),
     submittedAt: row.submitted_at,
     studentScore: row.student_score,
     answers: (row.answers ?? []).map(toAnswerResult),

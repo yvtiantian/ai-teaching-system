@@ -36,8 +36,10 @@ function getDisplayStatus(
   const isPastDeadline =
     record.deadline && dayjs(record.deadline).isBefore(dayjs());
 
-  if (sub === "graded") return { label: "已复核", color: "green" };
-  if (sub === "ai_graded") return { label: "AI已批", color: "cyan" };
+  if (sub === "graded") {
+    return { label: record.teacherReviewed ? "已复核" : "已判分", color: "green" };
+  }
+  if (sub === "ai_graded") return { label: "待复核", color: "cyan" };
   if (sub === "ai_grading") return { label: "AI批改中", color: "orange" };
   if (sub === "submitted") return { label: "已提交", color: "orange" };
   if (sub === "in_progress") {

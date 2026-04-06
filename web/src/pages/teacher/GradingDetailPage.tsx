@@ -20,6 +20,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useParams, useNavigate } from "react-router";
 import { useCallback, useEffect, useState } from "react";
+import { getGradingSourceTagInfo } from "@/lib/assignmentGrading";
 import { getRoleRedirectPath } from "@/lib/profile";
 import {
   teacherAcceptAllAiScores,
@@ -48,7 +49,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {
   submitted: { text: "已提交", color: "orange" },
   ai_grading: { text: "AI批改中", color: "orange" },
-  ai_graded: { text: "AI已批", color: "cyan" },
+  ai_graded: { text: "待复核", color: "cyan" },
   graded: { text: "已复核", color: "green" },
 };
 
@@ -124,8 +125,9 @@ export default function TeacherGradingDetailPage() {
       const scores: Record<string, number> = {};
       const comments: Record<string, string> = {};
       for (const ans of data.answers) {
-        scores[ans.answerId] = ans.score;
-        comments[ans.answerId] = ans.teacherComment ?? "";
+        const answerKey = ans.answerId ?? ans.questionId;
+        scores[answerKey] = ans.score;
+        comments[answerKey] = ans.teacherComment ?? "";
       }
       setEditScores(scores);
       setEditComments(comments);
@@ -290,25 +292,32 @@ export default function TeacherGradingDetailPage() {
       {/* 逐题查看 */}
       <div className="space-y-4">
         {detail.answers.map((ans, idx) => {
+          const answerKey = ans.answerId ?? ans.questionId;
           // 客观题（单选/多选/判断）仅展示，不可编辑评分
-          const editable = ans.questionType === "fill_blank" || ans.questionType === "short_answer";
+          const editable =
+            Boolean(ans.answerId) &&
+            (ans.questionType === "fill_blank" || ans.questionType === "short_answer");
           return (
             <AnswerGradeCard
-              key={ans.answerId}
+              key={answerKey}
               index={idx + 1}
               answer={ans}
               editable={editable}
               isFinalized={isFinalized}
               busy={busy}
-              editScore={editScores[ans.answerId] ?? ans.score}
-              editComment={editComments[ans.answerId] ?? ""}
+              editScore={editScores[answerKey] ?? ans.score}
+              editComment={editComments[answerKey] ?? ""}
               onScoreChange={(v) =>
-                setEditScores((prev) => ({ ...prev, [ans.answerId]: v }))
+                setEditScores((prev) => ({ ...prev, [answerKey]: v }))
               }
               onCommentChange={(v) =>
-                setEditComments((prev) => ({ ...prev, [ans.answerId]: v }))
+                setEditComments((prev) => ({ ...prev, [answerKey]: v }))
               }
-              onSave={() => handleSaveAnswer(ans.answerId)}
+              onSave={() => {
+                if (ans.answerId) {
+                  void handleSaveAnswer(ans.answerId);
+                }
+              }}
             />
           );
         })}
@@ -318,14 +327,6 @@ export default function TeacherGradingDetailPage() {
 }
 
 // ── 单题复核卡片 ─────────────────────────────────────────
-
-const GRADED_BY_LABEL: Record<string, { text: string; color: string }> = {
-  auto: { text: "自动", color: "blue" },
-  ai: { text: "AI评", color: "cyan" },
-  teacher: { text: "已复核", color: "green" },
-  pending: { text: "待评", color: "default" },
-  fallback: { text: "需手评", color: "orange" },
-};
 
 function AnswerGradeCard({
   index,
@@ -350,7 +351,10 @@ function AnswerGradeCard({
   onCommentChange: (v: string) => void;
   onSave: () => void;
 }) {
-  const gradedInfo = GRADED_BY_LABEL[answer.gradedBy ?? ""] ?? { text: answer.gradedBy ?? "-", color: "default" };
+  const gradedInfo = getGradingSourceTagInfo({
+    gradedBy: answer.gradedBy,
+    questionType: answer.questionType,
+  });
   return (
     <Card size="small" className="shadow-sm">
       <div className="mb-2 flex items-center gap-2">
@@ -363,7 +367,7 @@ function AnswerGradeCard({
             <span className="ml-1 text-cyan-600">（AI: {answer.aiScore}）</span>
           )}
         </span>
-        <Tag className="ml-auto" color={gradedInfo.color}>
+        <Tag className="ml-auto" color={gradedInfo.color} icon={gradedInfo.icon}>
           {gradedInfo.text}
         </Tag>
       </div>

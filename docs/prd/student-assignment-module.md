@@ -1,854 +1,749 @@
-# 学生作业模块 — 产品需求文档（PRD）
+# 学生作业模块 PRD
 
-> 日期: 2026-03-27
-> 状态: 规划中
-> 前置依赖: 课程模块（已完成）、教师布置作业模块（已完成）
+> **最后更新：** 2026-04-05 · **状态：** ✅ 已实现
 
 ---
 
 ## 一、概述
 
-学生作业模块是教学系统业务闭环的下半段。教师布置作业并发布后，学生在已选课程中查看作业、作答并提交，系统通过**智能体（Ollama LLM）** 自动批改所有题型，教师复核确认。学生可查看成绩、AI 反馈与解析，形成完整的 **布置 → 作答 → AI 批改 → 教师复核 → 反馈** 教学闭环。
-
-### 模块目标
-
-1. 学生能及时发现并完成课程作业
-2. **全部题型由 AI 智能体批改**：客观题精确匹配 + AI 生成个性化反馈；填空题 AI 语义匹配；简答题 AI 评分 + 评语
-3. 教师复核 AI 评分，可修改分数和评语，兼顾效率与公平
-4. 学生获得即时反馈（AI 个性化评语、答案解析、得分明细），促进学习
+学生在已选课程中查看教师布置的作业、在线作答、保存草稿、提交，并在批改完成后查看成绩与反馈。系统支持 5 种题型自动/AI 批改，学生端仅需完成作答流程。
 
 ---
 
 ## 二、核心业务流程
 
 ```
-学生进入「我的作业」页面
+学生进入「我的作业」列表
     ↓
-选择课程筛选 或 查看全部作业（按状态/截止时间排序）
+选择某门课程（或查看所有已选课程作业）
     ↓
-点击一份「已发布」作业 → 进入作答页面
+查看作业状态 → 点击「开始答题」
     ↓
-系统自动创建/恢复提交记录（status = in_progress）
+系统创建提交记录 (student_start_submission)
     ↓
-逐题或自由跳题作答：
-  - 单选题：选择 A/B/C/D
-  - 多选题：多选 A~F
-  - 判断题：选择 正确/错误
-  - 填空题：输入文本
-  - 简答题：输入长文本（支持多行）
+逐题作答（支持 5 种题型）
+    ├── 自动保存（每 30 秒 + 切题时）
+    └── 手动保存草稿
     ↓
-本地实时暂存（localStorage），防止意外丢失
+检查截止时间 → 确认提交
     ↓
-任意时刻可「保存草稿」→ 同步到服务端（status = in_progress）
+student_submit：
+    ├── 客观题 → SQL 精确匹配自动评分
+    ├── 填空题 → 逐空匹配（trim + 大小写不敏感）
+    └── 简答题 → 标记待 AI 批改
     ↓
-全部作答完毕 → 点击「提交作业」
-    ↓
-二次确认弹窗（显示未答题数量提示）
-    ↓
-提交 → status = submitted, submitted_at = now()
-    ↓
-后端两阶段批改：
-  1) SQL 精确匹配客观题（单选/多选/判断）→ 即时出分
-  2) 异步调用 AI 智能体（Ollama）批改填空题 + 简答题 → ai_grading
-    ↓
-AI 智能体批改内容：
-  - 客观题：生成个性化错因分析和学习建议（ai_feedback）
-  - 填空题：语义匹配评分 + 反馈（"python语言" ≈ "Python" → 满分）
-  - 简答题：对照参考答案评分 + 详细评语
-    ↓
-submission.status → ai_graded（AI 批改完成，等待教师复核）
-    ↓
-教师复核 AI 评分 → 可修改分数/评语 → 确认 → status = graded
-    ↓
-学生查看成绩详情：每题得分、正确答案、答案解析
+提交成功 → 跳转成绩页
+    ├── 纯客观题 → 直接显示最终成绩（status = graded）
+    └── 含简答题 → 触发 AI 批改 → 轮询等待结果
+        ↓
+        AI 批改完成 → status = ai_graded
+        → 教师复核 → status = graded
+        → 学生查看最终成绩与反馈
 ```
 
 ---
 
-## 三、角色与权限矩阵
-
-| 操作 | 学生 | 教师 | 管理员 |
-|------|------|------|--------|
-| 查看已发布作业列表 | ✅ 已选课程的 | ✅ 自己课程的 | ✅ 全局 |
-| 查看作业题目 | ✅ 已选课程的 | ✅ 自己课程的 | ✅ |
-| 创建/编辑提交 | ✅ 自己的 | ❌ | ❌ |
-| 提交作业 | ✅ 截止前 | ❌ | ❌ |
-| 查看自己的成绩 | ✅ 提交后 | ❌ | ❌ |
-| 查看学生提交列表 | ❌ | ✅ 自己课程的 | ✅ |
-| 复核 AI 批改结果 | ❌ | ✅ | ❌ |
-| 查看答案解析 | ✅ 批改后 | ✅ | ✅ |
-
----
-
-## 四、功能模块拆解
-
-### 4.1 学生作业列表（P0）
-
-**页面**: `/student/assignments`
-
-#### 功能描述
-- 显示学生所有已选课程中「已发布」和「已截止」的作业
-- 支持按课程筛选
-- 展示关键信息：作业标题、所属课程、截止时间、提交状态、得分
-- 按截止时间紧急程度排序（即将截止 → 未截止 → 已截止）
-
-#### 列表字段
-
-| 字段 | 说明 |
-|------|------|
-| 作业标题 | 点击进入详情 |
-| 所属课程 | 课程名称 |
-| 状态标签 | 未开始 / 答题中 / 已提交 / AI批改中 / AI已批 / 已复核 / 已截止（未提交）|
-| 截止时间 | 格式化显示，临近截止标红 |
-| 得分 | 已批改时显示 xx/总分，否则 — |
-| 操作 | 去答题 / 查看结果 |
-
-#### 状态映射逻辑
-
-```
-if 未创建 submission          → 「未开始」 灰色
-if submission.status = in_progress  → 「答题中」 蓝色
-if submission.status = submitted    → 「已提交」 橙色
-if submission.status = ai_grading   → 「AI批改中」 橙色（动画）
-if submission.status = ai_graded    → 「AI已批」 青色
-if submission.status = graded       → 「已复核」 绿色
-if 作业已截止 && 未提交            → 「已截止」 红色
-```
-
----
-
-### 4.2 作答页面（P0）
-
-**页面**: `/student/assignments/[assignmentId]`
-
-#### 功能描述
-- 展示作业基本信息（标题、说明、截止时间、总分）
-- 按顺序展示所有题目，支持题目导航面板
-- 实时自动暂存到 localStorage
-- 支持「保存草稿」（同步到服务端）和「提交作业」
-
-#### 页面布局
-
-```
-┌─────────────────────────────────────────────────────┐
-│  ← 返回作业列表     《作业标题》     截止: 2026-04-01  │
-├────────────────────────────────────┬────────────────┤
-│                                    │  题目导航       │
-│  第 1 题（单选题）  3分             │  ① ② ③ ④ ⑤    │
-│  ─────────────────                 │  ⑥ ⑦ ⑧ ⑨ ⑩    │
-│  题目内容 ...                      │                │
-│                                    │  ■ 已答  □ 未答 │
-│  ○ A. 选项一                       │                │
-│  ● B. 选项二                       │  ──────────── │
-│  ○ C. 选项三                       │  已答: 6/10    │
-│  ○ D. 选项四                       │                │
-│                                    │                │
-│  第 2 题（判断题）  2分             │                │
-│  ─────────────────                 │                │
-│  ...                               │                │
-├────────────────────────────────────┴────────────────┤
-│          [ 保存草稿 ]              [ 提交作业 ]       │
-└─────────────────────────────────────────────────────┘
-```
-
-#### 题型交互设计
-
-| 题型 | 交互方式 |
-|------|---------|
-| 单选题 | Radio 单选 |
-| 多选题 | Checkbox 多选 |
-| 判断题 | Radio（正确/错误）|
-| 填空题 | Input 文本框（支持多个空位）|
-| 简答题 | TextArea 多行文本 |
-
-#### 答案数据结构
+## 三、提交状态机
 
 ```typescript
-interface StudentAnswer {
-  questionId: string;
-  answer: unknown;  // 与 correctAnswer 结构对应
-  // 单选: { answer: "B" }
-  // 多选: { answer: ["A", "C"] }
-  // 判断: { answer: true }
-  // 填空: { answer: ["答案1", "答案2"] }
-  // 简答: { answer: "长文本回答..." }
-}
+type SubmissionStatus =
+  | "not_started"   // 未开始（仅在列表出现，无提交记录）
+  | "in_progress"   // 答题中（已创建提交记录）
+  | "submitted"     // 已提交（等待处理）
+  | "ai_grading"    // AI 批改中
+  | "ai_graded"     // AI 已批
+  | "graded"        // 最终成绩（教师已复核 或 纯客观自动完成）
 ```
 
-#### 关键交互
+**状态流转：**
+```
+not_started ─→ in_progress ─→ submitted
+                                  ↓
+                  ┌───── ai_grading ───→ ai_graded ───→ graded
+                  │                                       ↑
+                  └──── (纯客观题作业) ────────────────────┘
+```
 
-1. **进入页面**：检查是否有未完成 submission，有则恢复答案；无则创建新 submission
-2. **作答过程**：每次选择/输入后更新 localStorage 暂存
-3. **保存草稿**：将当前所有答案同步到服务端，不改变 status
-4. **提交作业**：
-   - 检查未答题数量，若有未答题显示确认弹窗
-   - 确认后提交，status → submitted
-   - 提交后**不可修改**（除非教师允许重新提交，Phase 2）
-5. **截止时间到达**：
-   - 前端倒计时提醒（剩余 30 分钟/10 分钟/1 分钟时提示）
-   - 截止后禁止提交，显示"已截止"状态
-6. **已提交/已批改**：只读模式查看自己的答案
+**关键规则：**
+- 纯客观题作业（无 `short_answer`）提交后 `student_submit` 直接完成所有评分，状态设为 `graded`
+- 含简答题作业：先自动评客观题 → 触发 AI 批改 → 教师复核 → `graded`
+- `ai_grading` 期间 AI 后台工作中，前端轮询直到状态变化
 
 ---
 
-### 4.3 两阶段批改机制（P0）
+## 四、数据模型
 
-#### 整体架构
+### 4.1 表结构
 
-提交后批改分两阶段执行，确保学生第一时间获得客观题反馈，同时异步完成 AI 深度批改：
+**assignment_submissions**
 
-```
-学生提交作业
-    ↓
-【阶段一：即时精确批改】（SQL 同步，< 100ms）
-  - 单选/多选/判断题：精确匹配出分
-  - submission.status → submitted
-  - 客观题分数立即可见
-    ↓
-【阶段二：AI 智能体批改】（Ollama 异步，30-90s）
-  - 客观题：生成个性化错因分析（ai_feedback）
-  - 填空题：语义匹配评分 + 反馈
-  - 简答题：对照参考答案评分 + 详细评语
-  - 完成后 submission.status → ai_graded
-    ↓
-【阶段三：教师复核】
-  - 教师查看 AI 评分，可修改分数/评语
-  - 确认后 submission.status → graded
-```
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | UUID PK | |
+| assignment_id | UUID FK | 所属作业 |
+| student_id | UUID FK | 学生 |
+| status | submission_status | 当前状态（枚举） |
+| submitted_at | TIMESTAMPTZ | 提交时间 |
+| total_score | NUMERIC | 最终得分 |
+| created_at / updated_at | TIMESTAMPTZ | |
 
-#### 阶段一：精确匹配（SQL 同步）
+**student_answers**
 
-| 题型 | 批改方式 | 规则 |
-|------|---------|------|
-| 单选题 | 精确匹配 | answer === correctAnswer → 满分，否则 0 分 |
-| 多选题 | 集合匹配 | 完全一致 → 满分；漏选（无错选）→ 半分；有错选 → 0 分 |
-| 判断题 | 精确匹配 | answer === correctAnswer → 满分，否则 0 分 |
-| 填空题 | 暂记 0 分 | 等待 AI 语义匹配后赋分 |
-| 简答题 | 暂记 0 分 | 等待 AI 评分后赋分 |
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | UUID PK | |
+| submission_id | UUID FK | 所属提交 |
+| question_id | UUID FK | 所属题目 |
+| answer | JSONB | 学生答案 |
+| is_correct | BOOLEAN | 是否正确 |
+| score | NUMERIC | 得分 |
+| ai_score | NUMERIC | AI 评分 |
+| ai_feedback | TEXT | AI 反馈文本 |
+| ai_detail | JSONB | AI 评分细项 |
+| teacher_comment | TEXT | 教师评语 |
+| graded_by | TEXT | 评分来源：'system' / 'ai' / 'teacher' |
+| created_at / updated_at | TIMESTAMPTZ | |
 
-#### 阶段二：AI 智能体批改（Ollama 异步）
-
-AI 智能体通过 Server 端 `/api/assignments/grade` 接口调用 Ollama，**逐道题**生成批改结果：
-
-| 题型 | AI 批改内容 | 输出 |
-|------|-----------|------|
-| 单选题 | 分析学生选错的原因，给出针对性学习建议 | ai_feedback 文本 |
-| 多选题 | 分析漏选/错选原因，解释每个选项的对错 | ai_feedback 文本 |
-| 判断题 | 解释正确判断的推理过程 | ai_feedback 文本 |
-| 填空题 | **语义匹配**：判断学生答案与标准答案是否语义等价 | score + ai_feedback |
-| 简答题 | **综合评分**：对照参考答案 + 评分维度，给出分数和详细评语 | score + ai_feedback |
-
-#### AI 批改 Prompt 设计
-
-**客观题反馈 Prompt**：
-```
-你是一位专业的教学评估助手。请分析以下题目的批改结果，为学生提供个性化反馈。
-
-题目类型: {question_type}
-题目内容: {content}
-选项: {options}
-学生答案: {student_answer}
-正确答案: {correct_answer}
-学生是否答对: {is_correct}
-
-请用中文生成简短的反馈（50-100字），包含：
-1. 如果答错：分析可能的错误原因，指出知识盲点
-2. 学习建议：针对这道题涉及的知识点给出改进方向
-3. 如果答对：简短肯定 + 一句拓展知识
-
-直接输出反馈文本，不要包含前缀。
-```
-
-**填空题语义匹配 Prompt**：
-```
-你是一位专业的教学评估助手。请判断学生的填空答案是否与标准答案语义等价。
-
-题目内容: {content}
-标准答案（各空）: {correct_answers}
-学生答案（各空）: {student_answers}
-每空满分: {score_per_blank}
-
-请逐空判断。判断标准：
-- 同义词、缩写、不同表述但意思相同 → 视为正确
-- 错别字但能识别意图 → 视为正确
-- 答案范围更大或更小 → 视为错误
-- 完全无关 → 视为错误
-
-以 JSON 格式返回：
-{
-  "blanks": [
-    { "blank_index": 0, "is_correct": true, "reason": "..." },
-    ...
-  ],
-  "total_score": 数字,
-  "feedback": "整体反馈文本"
-}
-```
-
-**简答题评分 Prompt**：
-```
-你是一位专业的教学评估助手。请根据参考答案对学生的简答题进行评分。
-
-题目内容: {content}
-参考答案: {correct_answer}
-学生答案: {student_answer}
-满分: {max_score}
-
-评分维度：
-1. 核心知识点覆盖度（40%）：是否涵盖参考答案中的关键概念
-2. 表述准确性（30%）：专业术语使用是否恰当
-3. 逻辑完整性（20%）：论述是否有条理
-4. 语言规范性（10%）：表达是否清晰流畅
-
-以 JSON 格式返回：
-{
-  "score": 数字（0 到 {max_score}，支持小数，保留1位）,
-  "breakdown": {
-    "knowledge_coverage": { "score": 数字, "max": 数字, "comment": "..." },
-    "accuracy": { "score": 数字, "max": 数字, "comment": "..." },
-    "logic": { "score": 数字, "max": 数字, "comment": "..." },
-    "language": { "score": 数字, "max": 数字, "comment": "..." }
-  },
-  "feedback": "整体评语（100-200字）",
-  "highlights": "答得好的地方",
-  "improvements": "需要改进的地方"
-}
-```
-
-#### 批改结果存储
+### 4.2 唯一约束
 
 ```sql
--- student_answers 表（需新建）
-CREATE TABLE public.student_answers (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    submission_id   UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
-    question_id     UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
-    answer          JSONB NOT NULL,           -- 学生答案
-    is_correct      BOOLEAN,                  -- 客观题: true/false; 填空/简答: AI判定
-    score           NUMERIC DEFAULT 0,        -- 得分（阶段一客观题即时赋分，阶段二 AI 赋分）
-    ai_score        NUMERIC,                  -- AI 给出的原始分数（教师可修改 score）
-    ai_feedback     TEXT,                     -- AI 个性化反馈（所有题型）
-    ai_detail       JSONB,                    -- AI 批改详情（简答题维度评分等结构化数据）
-    teacher_comment TEXT,                     -- 教师批注（复核时可填写）
-    graded_by       TEXT DEFAULT 'pending',   -- 'auto'=精确匹配, 'ai'=AI批改, 'teacher'=教师修改
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+UNIQUE (submission_id, question_id)  -- 每题只能有一条答案
+UNIQUE (assignment_id, student_id)   -- 每个学生每份作业只有一次提交
 ```
 
 ---
 
-### 4.4 成绩查看页面（P0）
+## 五、RPC 函数清单
 
-**页面**: `/student/assignments/[assignmentId]/result`
-
-#### 功能描述
-- 提交后即可查看客观题得分；AI 批改完成后显示全部分数和反馈
-- 展示总分、得分、每题得分明细
-- 对比：学生答案 vs 正确答案
-- 显示 AI 个性化反馈（所有题型）+ 教师评语（复核后）
-- 显示答案解析（教师复核完成后）
-
-#### 页面布局
-
-```
-┌─────────────────────────────────────────────────────┐
-│  ← 返回作业列表     《作业标题》成绩单               │
-├─────────────────────────────────────────────────────┤
-│  ┌──────────────────────────────────┐               │
-│  │  得分: 78 / 100    提交时间: ...  │               │
-│  │  状态: 已批改       批改时间: ...  │               │
-│  └──────────────────────────────────┘               │
-│                                                     │
-│  第 1 题（单选题）  3/3 分  ✅                       │
-│  ───────────────────────                            │
-│  题目内容 ...                                       │
-│  你的答案: B ✅                                     │
-│  正确答案: B                                        │
-│  解析: ...                                          │
-│                                                     │
-│  第 2 题（多选题）  2/4 分  ⚠️                      │
-│  ───────────────────────                            │
-│  题目内容 ...                                       │
-│  你的答案: A, C  （漏选 D）                          │
-│  正确答案: A, C, D                                  │
-│  解析: ...                                          │
-│                                                     │
-│  第 5 题（填空题）  2/3 分  ⚠️                      │
-│  ───────────────────────                            │
-│  你的答案: "python语言"                              │
-│  正确答案: "Python"                                  │
-│  AI 判定: ✅ 语义等价  "使用了中文表述，语义相同"       │
-│                                                     │
-│  第 8 题（简答题）  7/10 分                          │
-│  ───────────────────────                            │
-│  题目内容 ...                                       │
-│  你的答案: "..."                                    │
-│  AI 评分明细:                                       │
-│    知识覆盖: 3.2/4  准确性: 2.1/3  逻辑: 1.2/2      │
-│  AI 评语: "回答涵盖了主要知识点，但缺少..."            │
-│  教师评语: "整体不错，注意..."  (教师复核后显示)        │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-### 4.5 教师复核模块（P0）
-
-**页面**: `/teacher/assignments/[assignmentId]/grade`
-
-#### 功能描述
-- 在教师现有的统计页面基础上扩展
-- 列出所有学生提交，支持筛选（全部/AI已批/待复核/已完成）
-- 点击某学生 → 显示该学生的作答详情 + AI 批改结果
-- **所有题型均已由 AI 预评分**，教师角色变为「复核」
-- 教师可修改分数、添加/修改评语
-- 一键采纳 AI 评分（快速批阅）
-- 全部复核完成 → 确认发布成绩（submission.status → graded）
-
-#### 批改页面布局
-
-```
-┌─────────────────────────────────────────────────────┐
-│  ← 返回作业统计     复核: 张三的作业                  │
-├─────────────────────────────────────────────────────┤
-│  AI 评分: 82/100  [一键采纳全部 AI 评分]   总分: __/100│
-│                                                     │
-│  第 1 题（单选）  3/3  ✅                            │
-│  AI 反馈: "正确！TCP三次握手是网络基础..."            │
-│  [采纳] [修改分数]                                   │
-│                                                     │
-│  第 5 题（填空）  AI: 2/3  ⚠️                       │
-│  学生答案: "python语言"  标准答案: "Python"            │
-│  AI 判定: 语义等价 ✅  "学生使用了中文表述，语义相同"  │
-│  [采纳 2分] [修改: ___/3]                            │
-│                                                     │
-│  第 10 题（简答题）  AI: 7/10                        │
-│  ─────────────────                                  │
-│  学生答案: "..."                                    │
-│  参考答案: "..."                                    │
-│  AI 评分明细:                                       │
-│    知识覆盖: 3.2/4  准确性: 2.1/3  逻辑: 1.2/2  语言: 0.5/1│
-│  AI 评语: "回答涵盖了主要知识点，但缺少..."           │
-│  教师评分: [  7  ] / 10  [采纳AI分]                  │
-│  教师评语: [                          ]              │
-├─────────────────────────────────────────────────────┤
-│  [ 上一个学生 ]        [ 确认复核完成 ] [ 下一个学生 ] │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-### 4.6 AI 智能体批改服务（P0）
-
-#### 架构设计
-
-```
-前端(提交) → Supabase RPC(student_submit)
-                  ↓
-            阶段一: SQL 精确匹配（同步）
-                  ↓
-            HTTP 通知 Server 端启动 AI 批改
-                  ↓
-      Server: /api/assignments/grade（异步任务）
-                  ↓
-            逐题调用 Ollama JSON mode
-                  ↓
-            结果写回 student_answers（通过 Supabase Admin API）
-                  ↓
-            更新 submission.status → ai_graded
-```
-
-#### Server 端 API
-
-**新增端点**: `POST /api/assignments/grade`
-
-```python
-class GradeRequest(BaseModel):
-    submission_id: str
-    # 无需其他参数，Server 自行从 DB 读取题目+答案
-
-@router.post("/grade")
-async def grade_submission(body: GradeRequest, ...):
-    """
-    异步 AI 批改：
-    1. 查询 submission + questions + student_answers
-    2. 客观题：生成 ai_feedback（错因分析）
-    3. 填空题：AI 语义匹配 → 赋分 + feedback
-    4. 简答题：AI 评分 → 赋分 + feedback + detail
-    5. 更新所有 student_answers
-    6. 更新 submission.status = 'ai_graded'
-    """
-```
-
-#### Ollama 调用方式
-
-复用现有 `_call_ollama()` 模式（`server/src/services/assignment_generator.py`）：
-- **model**: `qwen2.5:7b`（与出题使用同一模型）
-- **format**: `json`（填空题/简答题需要结构化返回）
-- **stream**: `True`（避免长时间无响应超时）
-- **temperature**: `0.3`（批改需要更稳定的输出，低于出题的 0.7）
-- **逐题调用**：每道题独立调用一次 Ollama，避免上下文过长导致质量下降
-
-#### 超时与容错
-
-```
-- 单题 AI 批改超时: 60s
-- 整份作业 AI 批改超时: 5min（兜底）
-- 如果某题 AI 批改失败:
-    → 客观题: ai_feedback 留空，分数保持精确匹配结果
-    → 填空题: 回退为 trim + 忽略大小写的精确匹配
-    → 简答题: score = 0, ai_feedback = "AI 批改失败，请教师手动评分"
-    → graded_by 标记为 'fallback'
-- 全部题目批改完成后，即使部分失败，仍标记 submission.status = 'ai_graded'
-```
-
----
-
-## 五、数据库设计
-
-### 5.1 新增表
-
-#### student_answers（学生答案明细表）
-
-```sql
-CREATE TABLE IF NOT EXISTS public.student_answers (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    submission_id   UUID NOT NULL REFERENCES public.assignment_submissions(id) ON DELETE CASCADE,
-    question_id     UUID NOT NULL REFERENCES public.assignment_questions(id) ON DELETE CASCADE,
-    answer          JSONB NOT NULL DEFAULT '{}'::jsonb,
-    is_correct      BOOLEAN,              -- NULL = 未批改
-    score           NUMERIC NOT NULL DEFAULT 0,
-    ai_score        NUMERIC,              -- AI 给出的原始分数
-    ai_feedback     TEXT,                 -- AI 个性化反馈（所有题型）
-    ai_detail       JSONB,               -- AI 批改结构化详情（简答题维度评分、填空题逐空结果）
-    teacher_comment TEXT,                 -- 教师批注
-    graded_by       TEXT NOT NULL DEFAULT 'pending',  -- 'pending'/'auto'/'ai'/'teacher'/'fallback'
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (submission_id, question_id)
-);
-```
-
-### 5.2 现有表修改
-
-#### assignment_submissions.status 新增状态
-
-```sql
--- 原有: not_started / in_progress / submitted / graded
--- 新增: ai_grading / ai_graded
-ALTER TYPE submission_status ADD VALUE IF NOT EXISTS 'ai_grading' AFTER 'submitted';
-ALTER TYPE submission_status ADD VALUE IF NOT EXISTS 'ai_graded' AFTER 'ai_grading';
-```
-
-状态流转：
-```
-not_started → in_progress → submitted → ai_grading → ai_graded → graded
-```
-
-### 5.3 现有表说明
-
-| 表 | 状态 | 说明 |
-|----|------|------|
-| assignments | ✅ 已有 | 作业主表 |
-| assignment_questions | ✅ 已有 | 题目表 |
-| assignment_files | ✅ 已有 | 参考资料 |
-| assignment_submissions | ✅ 已有（需扩展） | 提交主表（新增 ai_grading/ai_graded 状态）|
-| student_answers | 🆕 需新建 | 每题答案明细 + AI 批改结果 |
-
----
-
-## 六、RPC 函数设计
-
-### 6.1 学生端 RPC
+### 5.1 学生函数
 
 | 函数 | 参数 | 返回 | 说明 |
 |------|------|------|------|
-| `student_list_assignments` | p_course_id? UUID | TABLE | 列出已选课程的已发布/已截止作业，含提交状态 |
-| `student_get_assignment` | p_assignment_id UUID | JSON | 获取作业详情 + 题目（**隐藏 correct_answer 和 explanation**，直到已批改）|
-| `student_start_submission` | p_assignment_id UUID | submission row | 创建或恢复提交记录（幂等）|
-| `student_save_answers` | p_submission_id UUID, p_answers JSONB | VOID | 保存草稿答案（覆盖写入 student_answers）|
-| `student_submit` | p_submission_id UUID | JSON | 提交作业 + SQL精确批改客观题 + 触发AI批改，返回 { submitted_at, auto_score } |
-| `student_get_result` | p_assignment_id UUID | JSON | 获取成绩详情（含 AI 反馈，仅 submitted/ai_graded/graded 状态）|
+| `student_list_assignments` | p_course_id (可选) | TABLE | 已选课程的已发布/已关闭作业列表，含提交状态/成绩 |
+| `student_get_assignment` | p_assignment_id | JSON | 作答视图：题目列表 + 已保存答案 + 提交状态（不返回正确答案） |
+| `student_start_submission` | p_assignment_id | assignment_submissions | 创建提交记录（幂等：已存在则返回现有） |
+| `student_save_answers` | p_submission_id, p_answers (JSONB[]) | VOID | 批量保存/更新答案草稿（UPSERT） |
+| `student_submit` | p_submission_id | JSON | 提交作业 → 自动评分 → 返回 {submitted_at, auto_score, has_subjective, assignment_id} |
+| `student_get_result` | p_assignment_id | JSON | 成绩详情：分数、每题结果、AI 反馈、教师评语 |
 
-### 6.2 教师端 RPC（扩展）
+### 5.2 内部函数
 
-| 函数 | 参数 | 返回 | 说明 |
-|------|------|------|------|
-| `teacher_get_submission_detail` | p_submission_id UUID | JSON | 获取某学生的完整作答 + AI 批改结果 |
-| `teacher_grade_answer` | p_answer_id UUID, p_score NUMERIC, p_comment TEXT | VOID | 复核单题（修改 AI 分数/添加评语） |
-| `teacher_finalize_grading` | p_submission_id UUID | VOID | 确认复核完成，status → graded，计算总分 |
-| `teacher_accept_all_ai_scores` | p_submission_id UUID | VOID | 一键采纳所有 AI 评分（graded_by → 'teacher'） |
-
----
-
-## 七、安全与权限设计
-
-### 7.1 答案可见性规则（关键）
-
-| 阶段 | 学生可见内容 |
-|------|-------------|
-| 未提交 | 题目内容、选项（**不可见** correct_answer、explanation）|
-| 已提交未批改 | 题目 + 自己的答案 + 客观题得分（**不可见** correct_answer、explanation）|
-| AI 已批改 | 题目 + 答案 + 全部得分 + AI 反馈（**不可见** correct_answer、explanation，等教师复核）|
-| 已复核（graded） | 题目 + 答案 + correct_answer + explanation + 得分 + AI反馈 + 教师评语 |
-
-### 7.2 RLS 策略
-
-```
-student_answers:
-  - 学生：SELECT/INSERT/UPDATE 自己的答案（通过 submission → student_id 校验）
-  - 教师：SELECT 自己课程学生的答案
-  - 管理员：全局访问
-
-assignment_questions.correct_answer:
-  - 方案：RPC 函数中控制返回字段，不在 RLS 层面隐藏列
-  - student_get_assignment() 中，根据 submission 状态决定是否返回 correct_answer
-```
-
-### 7.3 提交时间校验
-
-- 服务端强制校验截止时间，客户端校验仅为 UX 优化
-- `student_submit()` 中：`IF assignment.deadline < now() THEN RAISE EXCEPTION '作业已截止'`
-- 保存草稿不受截止时间限制（仅前端提示，不阻断）
-
----
-
-## 八、自动批改算法
-
-### 8.1 阶段一：SQL 精确匹配函数
-
-```sql
--- 在 student_submit() 内调用，仅处理单选/多选/判断
-FUNCTION _auto_grade_answer(
-    p_question_type question_type,
-    p_student_answer JSONB,
-    p_correct_answer JSONB,
-    p_max_score NUMERIC
-) RETURNS NUMERIC
-```
-
-### 8.2 SQL 精确匹配规则
-
-#### 单选题
-```
-student_answer: { "answer": "B" }
-correct_answer: { "answer": "B" }
-→ 完全匹配 → 满分
-→ 不匹配 → 0 分
-```
-
-#### 多选题
-```
-student_answer: { "answer": ["A", "C"] }
-correct_answer: { "answer": ["A", "C", "D"] }
-
-完全一致 → 满分
-漏选且无错选 → 50% 分（向下取整）
-有错选 → 0 分
-```
-
-#### 判断题
-```
-student_answer: { "answer": true }
-correct_answer: { "answer": false }
-→ 精确匹配 → 满分 / 0 分
-```
-
-#### 填空题、简答题
-```
-→ 阶段一暂记 0 分, graded_by = 'pending'
-→ 等待阶段二 AI 智能体批改
-```
-
-### 8.3 阶段二：AI 智能体评分规则
-
-#### 填空题（AI 语义匹配）
-```
-输入: 学生答案 + 标准答案 + 每空分值
-输出: { blanks: [{is_correct, reason}], total_score, feedback }
-
-AI 判断语义等价性:
-  "同意词" ≈ 标准答案 → 正确
-  "缩写" ≈ 全称 → 正确
-  "中文表述" ≈ "英文术语" → 正确
-  答案范围更大/更小 → 错误
-```
-
-#### 简答题（AI 综合评分）
-```
-输入: 题目 + 学生答案 + 参考答案 + 满分
-输出: { score, breakdown, feedback, highlights, improvements }
-
-评分维度:
-  知识覆盖(40%) + 准确性(30%) + 逻辑(20%) + 语言(10%)
-```
-
-#### 客观题（AI 反馈生成）
-```
-输入: 题目 + 学生答案 + 正确答案 + 是否正确
-输出: ai_feedback 文本（50-100字）
-
-答错: 分析错误原因 + 知识盲点 + 学习建议
-答对: 简短肯定 + 一句拓展知识
-```
-
----
-
-## 九、前端路由规划
-
-### 9.1 学生端
-
-| 路由 | 页面 | 功能 |
-|------|------|------|
-| `/student/assignments` | 作业列表 | 全部作业（含课程筛选）|
-| `/student/assignments/[id]` | 作答页面 | 答题 + 保存 + 提交 |
-| `/student/assignments/[id]/result` | 成绩查看 | 得分明细 + 解析 |
-
-### 9.2 教师端（扩展现有）
-
-| 路由 | 页面 | 功能 |
-|------|------|------|
-| `/teacher/assignments/[id]/grade` | 批改列表 | 学生提交列表 + 状态筛选 |
-| `/teacher/assignments/[id]/grade/[submissionId]` | 批改详情 | 逐题批改 + 评分 |
-
-### 9.3 侧边栏菜单新增
-
-```
-学生端新增:
-  📝 我的作业  →  /student/assignments
-```
-
----
-
-## 十、分阶段实施计划
-
-### Phase 1：基础作答 + 精确批改 + AI 智能体批改（本期）
-
-| 步骤 | 任务 | 涉及层 |
-|------|------|--------|
-| 1 | 新建 student_answers 表 + 索引 + RLS（含 ai_score/ai_detail/graded_by 字段）| DB |
-| 2 | 扩展 submission_status 枚举：新增 ai_grading / ai_graded | DB |
-| 3 | 实现 student_list_assignments RPC | DB |
-| 4 | 实现 student_get_assignment RPC（隐藏答案）| DB |
-| 5 | 实现 student_start_submission RPC | DB |
-| 6 | 实现 student_save_answers RPC | DB |
-| 7 | 实现 _auto_grade_answer 内部函数（SQL 精确匹配） | DB |
-| 8 | 实现 student_submit RPC（精确批改 + 触发AI）| DB |
-| 9 | 实现 student_get_result RPC | DB |
-| 10 | Server: AI 批改服务 assignment_grader.py（复用 Ollama 调用模式） | Server |
-| 11 | Server: POST /api/assignments/grade 端点 | Server |
-| 12 | 前端：学生作业列表页（含新状态显示） | Web |
-| 13 | 前端：作答页面（含题目导航面板） | Web |
-| 14 | 前端：提交确认弹窗 + 截止时间校验 | Web |
-| 15 | 前端：成绩查看页面（含 AI 反馈展示） | Web |
-| 16 | 前端：侧边栏新增「我的作业」 | Web |
-| 17 | 教师端：复核列表页（含 AI已批/待复核 筛选） | Web |
-| 18 | 教师端：逐题复核页面（AI评分展示 + 一键采纳 + 修改） | Web |
-| 19 | 实现 teacher_grade_answer + teacher_finalize_grading + teacher_accept_all_ai_scores RPC | DB |
-| 20 | BDD 测试：作答与提交流程 | Test |
-| 21 | BDD 测试：SQL 精确批改正确性 | Test |
-| 22 | BDD 测试：AI 智能体批改流程（mock Ollama） | Test |
-
-### Phase 2：进阶功能（远期）
-
-| 任务 | 说明 |
+| 函数 | 说明 |
 |------|------|
-| 允许重新提交 | 教师设置可提交次数上限 |
-| 作业统计报表 | 班级成绩分布、正确率热力图 |
-| 错题本 | 学生答错的题目归集 |
-| 批改完成自动通知学生 | 站内通知 / 邮件 |
-| 防作弊措施 | 切屏检测、答题时间分析 |
-| AI 评分可配置性 | 多选题半分规则、填空题匹配严格度 |
+| `_assert_student()` | 校验当前用户为学生，返回 uid |
+| `_auto_grade_answer(...)` | SQL 精确匹配客观题评分（含填空题逐空匹配） |
+
+### 5.3 提交评分逻辑 (`student_submit`)
+
+```
+1. 校验状态为 in_progress
+2. 校验作业未过截止时间且状态为 published
+3. 遍历每道题的学生答案 → 调用 _auto_grade_answer
+4. 计算 auto_score（客观题得分合计）
+5. 判断是否存在 short_answer 题目
+   - 无 → 直接 status = 'graded', total_score = auto_score
+   - 有 → status = 'submitted', 等待 AI 批改
+6. 返回结果
+```
 
 ---
 
-## 十一、技术要点
+## 六、AI 批改 — Server 端
 
-### 11.1 答案暂存策略
+### 6.1 触发方式
 
-```
-写入时机:
-  1. 每次答题后 → localStorage（instant，防断网）
-  2. 每 30 秒 / 切换题目时 → 调用 student_save_answers 同步服务端
-  3. 手动点击「保存草稿」→ 立即同步服务端
-
-恢复优先级:
-  1. 服务端已保存的 student_answers（优先）
-  2. localStorage 缓存（补充）
-  3. 空白（兜底）
-```
-
-### 11.2 截止时间处理
+前端 `student_submit` 返回后，若 `hasSubjective = true`，前端调用 REST API：
 
 ```
+POST /api/assignments/grade
+Body: { "submission_id": "uuid" }
+```
+
+这是一个 **fire-and-forget** 调用 — 前端不等待结果，即使失败也不影响提交。
+
+### 6.2 批改流程
+
+1. 标记 `status = 'ai_grading'`
+2. 仅处理 `short_answer` 题目（客观题已在 SQL 中评分完毕）
+3. 对每道简答题调用 **Ollama**（qwen2.5:7b）评分
+4. 4 维评分标准：知识覆盖(40%) + 准确性(30%) + 逻辑性(20%) + 语言表达(10%)
+5. 返回 JSON：score + feedback + 细项明细
+6. 单题超时 60s，失败降级为 0 分
+7. 汇总所有评分 → `status = 'ai_graded'`
+
+### 6.3 模型配置
+
+- **AI 批改：** Ollama — `qwen2.5:7b`，温度 0.3
+- **Base URL：** `OLLAMA__BASE_URL`（默认 `http://localhost:11434`）
+- **单题超时：** 60 秒
+- **任务超时：** 5 分钟
+
+---
+
+## 七、前端设计
+
+### 7.1 路由
+
+```
+/student/assignments                               → StudentAssignmentsPage（作业列表）
+/student/assignments/:assignmentId                 → StudentAssignmentAnswerPage（作答页）
+/student/assignments/:assignmentId/result          → StudentAssignmentResultPage（成绩页）
+```
+
+### 7.2 页面功能
+
+#### 作业列表 (`/student/assignments`)
+
+**课程筛选控件：**
+- `<Select>` allowClear, placeholder="全部课程", className="w-60"
+- options 来自 `studentListCourses()`，映射 `{ label: c.courseName, value: c.courseId }`
+- 右侧刷新按钮 `<Button icon={<ReloadOutlined />}>刷新</Button>`
+
+**表格列定义 (`TableColumnsType<StudentAssignment>`)：**
+
+| # | title | dataIndex / key | width | align | ellipsis | fixed | render 说明 |
+|---|-------|-----------------|-------|-------|----------|-------|-------------|
+| 1 | 作业标题 | `dataIndex: "title"` | — | — | `true` | — | 纯文本 |
+| 2 | 所属课程 | `dataIndex: "courseName"` | `160` | — | `true` | — | 纯文本 |
+| 3 | 状态 | `key: "displayStatus"` | `110` | — | — | — | `<Tag color={info.color}>{info.label}</Tag>`（调用 `getDisplayStatus`） |
+| 4 | 截止时间 | `dataIndex: "deadline"` | `160` | — | — | — | `YYYY-MM-DD HH:mm`；近截止红色高亮 |
+| 5 | 得分 | `key: "score"` | `100` | `center` | — | — | `{score} / {totalScore}` 或 `"-"` |
+| 6 | 操作 | `key: "actions"` | `200` | — | — | `"right"` | 去答题 / 查看结果 按钮 |
+
+**CommonTable 属性：** `rowKey="id"`, `scroll={{ x: 800 }}`
+**空状态文案：**
+- 有课程筛选：`"该课程暂无作业"`
+- 无课程筛选：`"暂无作业，请先加入课程"`
+
+**状态标签映射 (`getDisplayStatus`)：**
+
+| submissionStatus | 额外条件 | label | color |
+|-----------------|----------|-------|-------|
+| `graded` | — | 已复核 | `green` |
+| `ai_graded` | — | AI已批 | `cyan` |
+| `ai_grading` | — | AI批改中 | `orange` |
+| `submitted` | — | 已提交 | `orange` |
+| `in_progress` | `status==="closed"` \|\| 已过 deadline | 已截止 | `red` |
+| `in_progress` | 正常 | 答题中 | `blue` |
+| `not_started` | `status==="closed"` \|\| 已过 deadline | 已截止 | `red` |
+| `not_started` | 正常 | 未作答 | `default` |
+
+**操作按钮条件：**
+
+| 函数 | 条件 | 按钮 | 图标 | 路由 |
+|------|------|------|------|------|
+| `canAnswer(record)` | `status === "published"` AND 未过 deadline AND (`sub === "not_started"` \|\| `"in_progress"`) | 去答题 | `<EditOutlined />` | `/student/assignments/${record.id}` |
+| `canViewResult(record)` | `sub` ∈ `["submitted","ai_grading","ai_graded","graded"]` | 查看结果 | `<EyeOutlined />` | `/student/assignments/${record.id}/result` |
+
+**近截止高亮规则（截止时间列）：**
+- 条件：`status === "published"` AND `deadline.isAfter(now)` AND `deadline.diff(now, "hour") < 24`
+- 样式：`className="text-red-500 font-medium"`
+
+**得分列显示规则：**
+- 显示 `{submissionScore} / {totalScore}`：当 `submissionScore != null` 且 `submissionStatus ∈ ["submitted","ai_grading","ai_graded","graded"]`
+- 否则显示 `"-"`
+
+---
+
+#### 作答页 (`/student/assignments/:assignmentId`)
+
+**布局结构：**
+```
+┌─ 顶部栏（返回按钮 + 标题 + 截止Tag + 总分Tag）──────────────────┐
+├─ 主内容区（flex gap-4）─────────────────────────────────────────┤
+│  ┌─ 左侧答题区（flex-1 overflow-y-auto）─┐  ┌─ 右侧导航（w-52）┐│
+│  │  描述（可选，blue-50 bg）             │  │  题目导航        ││
+│  │  QuestionCard × N                     │  │  已/未答图例     ││
+│  └───────────────────────────────────────┘  │  统计 X/Y        ││
+│                                              └─────────────────┘│
+├─ 底部操作栏（保存草稿 + 提交作业）──────────────────────────────┤
+└────────────────────────────────────────────────────────────────┘
+```
+
+**截止时间检测和显示（`deadlineInfo` useMemo）：**
+
+| 条件 | text | urgent | Tag color |
+|------|------|--------|-----------|
+| `deadline.isBefore(now)` | `"已截止"` | `true` | `red` |
+| `diff < 1 小时` | `` `剩余 ${分钟数} 分钟` `` | `true` | `red` |
+| `diff < 24 小时` | `` `剩余 ${小时数} 小时` `` | `true` | `red` |
+| `≥ 24 小时` | `YYYY-MM-DD HH:mm` | `false` | `blue` |
+
+**进入页面时截止检测（`loadDetail`）：**
+- `canEdit = (submissionStatus === "not_started" || "in_progress")`
+- 若 `canEdit && (status === "closed" || isPastDeadline)`：
+  - `message.warning("作业已截止，无法继续答题")` → `navigate("/student/assignments", { replace: true })`
+- 若 `!canEdit`（已提交）：
+  - 直接跳转 `/student/assignments/${assignmentId}/result`
+
+**localStorage 缓存机制：**
+- Key 模式：`student_answers_${assignmentId}`
+- `saveLs(assignmentId, answers)`：`localStorage.setItem(key, JSON.stringify(answers))`，try/catch 忽略错误
+- `loadLs(assignmentId)`：`JSON.parse(localStorage.getItem(key))`，失败返回 `{}`
+- `clearLs(assignmentId)`：`localStorage.removeItem(key)`，成功提交后调用
+- **合并策略：** `{ ...lsAnswers, ...serverAnswers }`（服务端覆盖本地）
+
+**自动保存机制（每 30 秒）：**
+- 间隔：**30000ms**（30 秒）
+- 前提条件：`submissionId` 存在 AND `!isReadonly`
+- 使用 `useRef` 双引用模式：
+  - `saveTimerRef: ReturnType<typeof setInterval> | null` — interval ID
+  - `answersRef: Record<string, unknown>` — 实时答案快照（`updateAnswer` 中同步更新）
+- Payload 构建：`Object.entries(answersRef.current).map(([questionId, answer]) => ({ questionId, answer }))`
+- 空 payload 跳过
+- 错误处理：**完全静默**（catch 块为空）
+- 清理：useEffect 返回 `clearInterval(saveTimerRef.current)`
+
+**`isAnswered(val)` 判空逻辑：**
+- `null / undefined` → `false`
+- `string` → `val.trim().length > 0`
+- `boolean` → `true`
+- `Array` → `val.some(v => string ? v.trim().length > 0 : v != null)`
+- `object` → 递归检查 `val.answer`
+- 其它 → `true`
+
+**题型渲染组件：**
+
+| 题型 | 组件 | Ant Design 控件 | value 类型 | 特殊说明 |
+|------|------|-----------------|-----------|----------|
+| `single_choice` | `SingleChoiceInput` | `Radio.Group` + `Space direction="vertical"` | `{ answer: string }` | 选项格式 `"{label}. {text}"` |
+| `multiple_choice` | `MultipleChoiceInput` | `Checkbox.Group` + `Space direction="vertical"` | `{ answer: string[] }` | 选项格式 `"{label}. {text}"` |
+| `true_false` | `TrueFalseInput` | `Radio.Group` + `Space`（水平） | `{ answer: boolean }` | 选项：`true="正确"`, `false="错误"` |
+| `fill_blank` | `FillBlankInput` | N × `Input` + `Space direction="vertical"` | `{ answer: string[] }` | 空位检测：`content.match(/_{3,}/g)`，最少 1 空；placeholder `"第 X 空"`；className `"max-w-md"` |
+| `short_answer` | `ShortAnswerInput` | `TextArea rows={4}` | `{ answer: string }` | placeholder `"请输入你的回答"`；className `"max-w-2xl"` |
+
+**导航面板（右侧 w-52）：**
+- 标题：`"题目导航"` (text-sm font-medium text-gray-500)
+- 按钮网格：`h-8 w-8 rounded text-sm font-medium`
+  - 已答：`bg-indigo-500 text-white`
+  - 未答：`bg-gray-100 text-gray-500 hover:bg-gray-200`
+- 点击：`document.getElementById(`question-${q.id}`).scrollIntoView({ behavior: "smooth", block: "center" })`
+- 图例：indigo 方块 = 已答，gray 方块 = 未答
+- 统计：`"已答: {answered} / {total}"`
+
+**提交流程（`handleSubmit`）：**
+1. 先保存草稿 → `studentSaveAnswers(submissionId, payload)`
+2. 统计未答题：`totalQuestions - answeredCount`
+3. `Modal.confirm` 弹窗：
+   - **title:** `"提交作业"`
+   - **content (有未答):** `` `你还有 ${unanswered} 道题未作答，确定提交吗？提交后不可修改。` ``
+   - **content (全部已答):** `"确定提交作业吗？提交后不可修改。"`
+   - **okText:** `"确定提交"`
+   - **cancelText:** `"继续答题"`
+4. onOk 回调：
+   - `studentSubmit(submissionId)` → 返回 `{ autoScore, hasSubjective }`
+   - `clearLs(assignmentId)` — 清除 localStorage 缓存
+   - `message.success(`作业已提交！客观题得分 ${result.autoScore} 分`)`
+   - 若 `result.hasSubjective`：`triggerAiGrading(submissionId)` — fire-and-forget
+   - `navigate(`/student/assignments/${assignmentId}/result`)`
+
+**底部操作栏（仅 `!isReadonly` 时显示）：**
+- `<Button icon={<SaveOutlined />} loading={saving}>保存草稿</Button>`
+- `<Button type="primary" icon={<CheckCircleOutlined />} loading={submitting}>提交作业</Button>`
+
+---
+
+#### 成绩页 (`/student/assignments/:assignmentId/result`)
+
+**状态标签映射 (`STATUS_LABEL`)：**
+
+| SubmissionStatus | text | color |
+|-----------------|------|-------|
+| `not_started` | 未作答 | `default` |
+| `in_progress` | 答题中 | `blue` |
+| `submitted` | 已提交 | `orange` |
+| `ai_grading` | AI批改中 | `orange` |
+| `ai_graded` | AI已批 | `cyan` |
+| `graded` | 已复核 | `green` |
+
+**轮询机制（FE-01 修复）：**
+- 触发条件：`currentStatus === "submitted" || currentStatus === "ai_grading"`
+- 间隔：**8000ms**（8 秒）
+- 使用 `useRef<ReturnType<typeof setInterval> | null>`（`pollRef`）
+- 每次轮询调用 `studentGetResult(assignmentId)`，更新 result state
+- 停止条件：`data.submissionStatus !== "submitted" && data.submissionStatus !== "ai_grading"` → `clearInterval`
+- 清理：useEffect 返回 `clearInterval(pollRef.current); pollRef.current = null`
+- 轮询失败静默忽略
+
+**批改中视觉提示（`isPolling` 时显示）：**
+- `className="mb-3 flex items-center gap-2 rounded-lg bg-cyan-50 border border-cyan-200 px-4 py-3 text-sm text-cyan-700"`
+- 内容：`<Spin size="small" />` + `"AI 正在批改主观题，页面将自动刷新…"`
+
+**成绩概览区域：**
+- 得分：`text-2xl font-bold text-indigo-600`，格式 `{studentScore ?? "-"} / {totalScore}`
+- 提交时间：`YYYY-MM-DD HH:mm`
+
+**答案卡片（`AnswerCard`）渲染规则：**
+- 每题头部：`<Tag color="blue">第 {index} 题</Tag>` + `<Tag>{QUESTION_TYPE_LABEL[type]}</Tag>` + ScoreIcon + `"{score} / {maxScore} 分"`
+
+**正确答案/解析显示规则：**
+- `isObjective = questionType ∈ ["single_choice", "multiple_choice", "true_false", "fill_blank"]`
+- `showCorrect = isObjective || status === "graded"`
+- 客观题（含填空）：提交后即显示正确答案和解析
+- 主观题（简答）：仅 `graded` 状态才显示正确答案和解析
+
+**ScoreIcon 组件：**
+| isCorrect | 图标 | 样式 |
+|-----------|------|------|
+| `true` | `CheckCircleFilled` | `text-green-500` |
+| `false` | `CloseCircleFilled` | `text-red-500` |
+| `null` | `MinusCircleFilled` | `text-gray-400` |
+
+**`formatAnswer(answer, questionType)` 格式化：**
+| 题型 | 格式 |
+|------|------|
+| `single_choice` | `String(val)` |
+| `multiple_choice` | `val.join(", ")` |
+| `true_false` | `true → "正确"`, `false → "错误"` |
+| `fill_blank` | `val.join(" \| ")` |
+| `short_answer` | `String(val)` |
+| null/未作答 | `"（未作答）"` |
+
+**AI 反馈展示（cyan-50 背景）：**
+- 标题：`"AI 反馈"` (font-medium text-cyan-700)
+- 内容：`whitespace-pre-wrap text-gray-700`
+
+**AI 评分维度展示（仅 `short_answer` 题型 + `aiDetail` 存在时）：**
+- 标题：`"AI 评分明细"` (font-medium text-cyan-700)
+- 维度映射 (`AiDetailBreakdown`)：
+
+| key | label |
+|-----|-------|
+| `knowledge_coverage` | 知识覆盖 |
+| `accuracy` | 表述准确性 |
+| `logic` | 逻辑完整性 |
+| `language` | 语言规范性 |
+
+- 每维度显示：`{label}: {dim.score} / {dim.max}` + `— {dim.comment}`（如有）
+
+**教师评语展示（green-50 背景）：**
+- 标题：`"教师评语"` (font-medium text-green-700)
+- 内容：`whitespace-pre-wrap text-gray-700`
+
+### 7.3 TypeScript 类型
+
+```typescript
+// 列表项
+interface StudentAssignment {
+  id: string; courseId: string; courseName: string
+  title: string; description: string | null
+  status: AssignmentStatus; deadline: string | null
+  totalScore: number; questionCount: number
+  submissionStatus: SubmissionStatus
+  submissionScore: number | null; submittedAt: string | null
+  createdAt: string
+}
+
+// 作答视图
+interface StudentAssignmentDetail {
+  id: string; courseId: string; courseName: string
+  title: string; description: string | null
+  status: AssignmentStatus; deadline: string | null
+  totalScore: number
+  questions: StudentQuestion[]
+  savedAnswers: SavedAnswer[]
+  submissionId: string | null
+  submissionStatus: SubmissionStatus
+  submittedAt: string | null
+}
+
+// 题目（不含正确答案）
+interface StudentQuestion {
+  id: string; questionType: QuestionType
+  sortOrder: number; content: string
+  options?: QuestionOption[] | null
+  score: number
+  correctAnswer?: Record<string, unknown> | null  // 仅复核后返回
+  explanation?: string | null
+}
+
+interface SavedAnswer { questionId: string; answer: unknown }
+
+interface SubmitResult {
+  submittedAt: string; autoScore: number
+  hasSubjective: boolean; assignmentId: string
+}
+
+interface AnswerResult {
+  questionId: string; questionType: QuestionType
+  sortOrder: number; content: string
+  options?: QuestionOption[] | null
+  maxScore: number
+  correctAnswer?: Record<string, unknown> | null
+  explanation?: string | null
+  studentAnswer: unknown; score: number
+  isCorrect: boolean | null
+  aiFeedback: string | null
+  aiDetail: Record<string, unknown> | null
+  teacherComment: string | null; gradedBy: string
+}
+
+interface AssignmentResult {
+  assignmentId: string; courseName: string; title: string
+  totalScore: number; submissionId: string
+  submissionStatus: SubmissionStatus
+  submittedAt: string; studentScore: number | null
+  answers: AnswerResult[]
+}
+```
+
+### 7.4 服务层函数
+
+```
+studentAssignments.ts:
+  studentListAssignments(courseId?)                 → StudentAssignment[]
+  studentGetAssignment(assignmentId)                → StudentAssignmentDetail
+  studentStartSubmission(assignmentId)              → { submissionId, status }
+  studentSaveAnswers(submissionId, answers)          → void
+  studentSubmit(submissionId)                        → SubmitResult
+  triggerAiGrading(submissionId)                     → void (fire-and-forget, REST API)
+  studentGetResult(assignmentId)                     → AssignmentResult
+```
+
+### 7.5 服务层 Row 接口（snake_case，匹配 RPC 返回）
+
+**StudentAssignmentRow（13 字段）：**
+```typescript
+{ id: string; course_id: string; course_name: string; title: string;
+  description: string | null; status: "published" | "closed";
+  deadline: string | null; total_score: number;
+  question_count: number | string; submission_status: string;
+  submission_score: number | null; submitted_at: string | null;
+  created_at: string }
+```
+
+**StudentAssignmentDetailRow（13 字段）：**
+```typescript
+{ id: string; course_id: string; course_name: string; title: string;
+  description: string | null; status: "published" | "closed";
+  deadline: string | null; total_score: number;
+  questions: QuestionRow[]; saved_answers: SavedAnswerRow[];
+  submission_id: string | null; submission_status: string;
+  submitted_at: string | null }
+```
+
+**QuestionRow（8 字段）：**
+```typescript
+{ id: string; question_type: string; sort_order: number;
+  content: string; options: { label: string; text: string }[] | null;
+  score: number; correct_answer?: Record<string, unknown> | null;
+  explanation?: string | null }
+```
+
+**SavedAnswerRow：** `{ question_id: string; answer: unknown }`
+
+**SubmissionRow（7 字段）：**
+```typescript
+{ id: string; assignment_id: string; student_id: string;
+  status: string; submitted_at: string | null;
+  total_score: number | null; created_at: string; updated_at: string }
+```
+
+**SubmitResultRow（4 字段）：**
+```typescript
+{ submitted_at: string; auto_score: number;
+  has_subjective: boolean; assignment_id: string }
+```
+
+**AnswerResultRow（14 字段）：**
+```typescript
+{ question_id: string; question_type: string; sort_order: number;
+  content: string; options: { label: string; text: string }[] | null;
+  max_score: number; correct_answer: Record<string, unknown> | null;
+  explanation: string | null; student_answer: unknown;
+  score: number; is_correct: boolean | null;
+  ai_feedback: string | null; ai_detail: Record<string, unknown> | null;
+  teacher_comment: string | null; graded_by: string }
+```
+
+**AssignmentResultRow（9 字段）：**
+```typescript
+{ assignment_id: string; course_name: string; title: string;
+  total_score: number; submission_id: string;
+  submission_status: string; submitted_at: string;
+  student_score: number | null; answers: AnswerResultRow[] }
+```
+
+### 7.6 Transformer 函数
+
+| 函数 | 关键转换 |
+|------|----------|
+| `toStudentAssignment` | `Number(row.total_score)`, `Number(row.question_count)`, submission_status 默认 `"not_started"` |
+| `toStudentQuestion` | cast `question_type as StudentQuestion["questionType"]`, `correctAnswer: row.correct_answer ?? null` |
+| `toStudentAssignmentDetail` | 组合映射 questions 和 savedAnswers 数组，submission_status 默认 `"not_started"` |
+| `toAnswerResult` | 14+ 字段映射，`gradedBy: row.graded_by \|\| "pending"` |
+| `toAssignmentResult` | 组合映射，submission_status 默认 `"submitted"`, answers 嵌套 `toAnswerResult` |
+
+### 7.7 错误映射（`mapError`）
+
+| 原始错误消息（包含） | 映射后消息 |
+|---------------------|-----------|
+| `"作业不存在"` | `"作业不存在或无权查看"` |
+| `"未加入该课程"` | `"你未加入该课程"` |
+| `"作业已截止"` | `"作业已截止，无法提交"` |
+| `"作业已提交"` | `"作业已提交，不可重复提交"` |
+| `"作业未发布"` | `"作业未发布或已关闭"` |
+| `"尚未提交"` | `"你尚未提交此作业"` |
+| `"无法继续保存"` | `"作业已提交，无法继续保存"` |
+
+### 7.8 RPC 调用映射
+
+| 前端函数 | RPC 函数 | 参数 |
+|---------|---------|------|
+| `studentListAssignments(courseId?)` | `student_list_assignments` | `{ p_course_id: courseId ?? null }` |
+| `studentGetAssignment(assignmentId)` | `student_get_assignment` | `{ p_assignment_id: assignmentId }` |
+| `studentStartSubmission(assignmentId)` | `student_start_submission` | `{ p_assignment_id: assignmentId }` |
+| `studentSaveAnswers(submissionId, answers)` | `student_save_answers` | `{ p_submission_id, p_answers: [{question_id, answer}] }` |
+| `studentSubmit(submissionId)` | `student_submit` | `{ p_submission_id: submissionId }` |
+| `triggerAiGrading(submissionId)` | **REST** `POST /api/assignments/grade` | `{ submission_id: submissionId }` |
+| `studentGetResult(assignmentId)` | `student_get_result` | `{ p_assignment_id: assignmentId }` |
+
+---
+
+## 八、SQL 函数实现细节
+
+### 8.1 `_assert_student()`
+- `SECURITY DEFINER`，`SET search_path = public`
+- 获取 `auth.uid()`，若为 NULL → `RAISE EXCEPTION '用户未登录'`
+- 查询 `profiles.role`，若不是 `'student'` → `RAISE EXCEPTION '仅学生可执行此操作'`
+- 返回 `UUID`
+
+### 8.2 `student_list_assignments(p_course_id UUID DEFAULT NULL)`
+- 返回 TABLE（13 列）
+- JOIN：`assignments → courses → course_enrollments`（`ce.student_id = v_uid AND ce.status = 'active'`）
+- LEFT JOIN：`assignment_questions`（COUNT 统计 question_count）、`assignment_submissions`（当前学生的提交记录）
+- WHERE：`a.status IN ('published', 'closed')`，可选 `p_course_id` 过滤
+- 排序规则（紧急度排序）：
+  ```sql
+  CASE
+    WHEN a.status = 'published' AND a.deadline > now() THEN 0  -- 未截止优先
+    WHEN a.status = 'published' THEN 1                          -- 已过截止
+    ELSE 2                                                       -- closed
+  END,
+  a.deadline ASC NULLS LAST,
+  a.created_at DESC
+  ```
+
+### 8.3 `student_get_assignment(p_assignment_id UUID)`
+- 返回 JSON
+- 校验：作业 `status IN ('published', 'closed')` 且学生已选课
+- **答案可见性规则**：仅 `v_submission.status = 'graded'` 时返回 `correct_answer` 和 `explanation`
+- 返回字段：`id, course_id, course_name, title, description, status, deadline, total_score, questions[], saved_answers[], submission_id, submission_status, submitted_at`
+- `submission_status` 默认 `'not_started'`（无提交记录时）
+
+### 8.4 `student_start_submission(p_assignment_id UUID)`
+- 返回 `assignment_submissions` 行
+- 校验：作业 `status = 'published'`，学生已选课（`course_enrollments.status = 'active'`）
+- **幂等操作**：`INSERT ... ON CONFLICT (assignment_id, student_id) DO NOTHING`，然后 SELECT 返回
+
+### 8.5 `student_save_answers(p_submission_id UUID, p_answers JSONB)`
+- 校验：提交记录归属当前学生，`status = 'in_progress'`
+- 非 in_progress → `RAISE EXCEPTION '作业已提交，无法继续保存'`
+- **UPSERT**：`INSERT ... ON CONFLICT (submission_id, question_id) DO UPDATE SET answer = EXCLUDED.answer, updated_at = now()`
+
+### 8.6 `_auto_grade_answer(p_question_type, p_student_answer JSONB, p_correct_answer JSONB, p_max_score NUMERIC)`
+- 返回 TABLE `(score NUMERIC, is_correct BOOLEAN)`
+- `IMMUTABLE` 函数
+
+**评分规则：**
+
+| 题型 | 评分方式 | 满分条件 | 部分得分 | 零分条件 |
+|------|----------|---------|---------|---------|
+| `single_choice` | 精确匹配 `->>'answer'` | 完全一致 | — | 不一致或为空 |
+| `true_false` | 精确匹配 `->'answer'` (JSON 比较) | 完全一致 | — | 不一致 |
+| `multiple_choice` | 数组排序后比较 | 完全一致 → 满分 | 漏选（无错选）→ `FLOOR(max_score * 0.5 * 2) / 2` | 有错选 → 0 分 |
+| `fill_blank` | 逐空 `LOWER(TRIM(...))` 匹配 | 全部正确 → 满分 | 每空 `ROUND(max_score / blank_count, 1)` | 空答案或不匹配 → 0 |
+| `short_answer` | 不评分 | — | — | 固定返回 `(0, NULL)` |
+
+**多选题详细逻辑：**
+1. 提取学生/正确答案数组并排序
+2. 空答案 → `(0, false)`
+3. 检查错选：`EXISTS (SELECT 1 FROM unnest(student_arr) WHERE s <> ALL(correct_arr))`
+4. 有错选 → `(0, false)`
+5. 完全一致 → `(max_score, true)`
+6. 漏选无错选 → `(FLOOR(max_score * 0.5 * 2) / 2, false)` — 半分向下取整到 0.5
+
+**填空题详细逻辑：**
+1. 正确答案若非数组则包装为数组
+2. `blank_count = MAX(jsonb_array_length(correct_answers), 1)`
+3. `score_per_blank = ROUND(max_score / blank_count, 1)`
+4. 逐空比较：`LOWER(TRIM(student)) = LOWER(TRIM(correct))`
+5. 总分 `LEAST(v_total, max_score)`
+
+### 8.7 `student_submit(p_submission_id UUID)`（最终版 — 含 D-01 + fill_blank 修复）
+- 返回 JSON `{submitted_at, auto_score, has_subjective, assignment_id}`
+- 校验链：
+  1. `_assert_student()` → uid
+  2. 提交记录归属校验 + `status = 'in_progress'`（否则 `'作业已提交，不可重复提交'`）
+  3. 作业 `status = 'published'`（否则 `'作业未发布或已关闭'`）
+  4. `deadline` 未过期（否则 `'作业已截止，无法提交'`）
+- 评分循环：
+  - `single_choice / multiple_choice / true_false / fill_blank` → 调用 `_auto_grade_answer` → UPDATE `student_answers` SET score/is_correct/graded_by='auto'
+  - `short_answer` → 设 `v_has_subjective = true`
+- **状态设置（D-01 修复）：**
+  - `v_has_subjective = true` → `status = 'submitted'`（等 AI）
+  - `v_has_subjective = false` → `status = 'graded'`（纯客观题直接完成）
+
+### 8.8 `student_get_result(p_assignment_id UUID)`（含填空题即显修复）
+- 返回 JSON `{assignment_id, course_name, title, total_score, submission_id, submission_status, submitted_at, student_score, answers[]}`
+- 校验：学生已选课 + 已提交（`status NOT IN ('not_started', 'in_progress')`，否则 `'你尚未提交此作业'`）
+- **正确答案/解析显示规则：**
+  - `graded` → 所有题目显示 `correct_answer` + `explanation`
+  - 非 graded → 仅 `single_choice, multiple_choice, true_false, fill_blank` 显示
+  - `short_answer` + 非 graded → `correct_answer = NULL, explanation = NULL`
+- `teacher_comment`：仅 `graded` 状态返回
+
+---
+
+## 九、RLS 策略
+
+**`assignment_submissions` 表（S-01 修复后）：**
+- ~~原策略 `FOR ALL`~~ → 拆分为 3 条独立策略
+- `Students can select own submissions` → FOR SELECT → `USING (student_id = auth.uid())`
+- `Students can insert own submissions` → FOR INSERT → `WITH CHECK (student_id = auth.uid())`
+- `Students can update own submissions` → FOR UPDATE → `USING (student_id = auth.uid())`
+- **无 DELETE 策略** — 学生不可删除提交记录
+
+**`student_answers` 表（S-01 修复后）：**
+- ~~原策略 `FOR ALL`~~ → 拆分为 3 条独立策略
+- `Students can select own answers` → FOR SELECT → `USING (EXISTS (SELECT 1 FROM assignment_submissions sub WHERE sub.id = student_answers.submission_id AND sub.student_id = auth.uid()))`
+- `Students can insert own answers` → FOR INSERT → `WITH CHECK (同上)`
+- `Students can update own answers` → FOR UPDATE → `USING (同上)`
+- **无 DELETE 策略** — 学生不可删除答案
+
+---
+
+## 十、审计修复清单（20260329_audit_fixes.sql）
+
+| 编号 | 修复项 | 说明 |
+|------|--------|------|
+| D-01 | `student_submit` 纯客观题直接 graded | 原来无论是否有主观题都设为 submitted；修复后判断 `v_has_subjective`，无主观题时直接 `graded` |
+| DB-02 | `teacher_list_assignments` submitted_count | 原只统计 `status='submitted'`；修复后扩展为 `IN ('submitted','ai_grading','ai_graded','graded')` |
+| D-03 | `teacher_get_assignment_stats` 增加 ai_graded_count | 原缺少 AI 已批/待复核数量统计 |
+| S-01 | `student_answers` + `assignment_submissions` RLS | 原 `FOR ALL` 隐式授予 DELETE；修复后拆分为 SELECT/INSERT/UPDATE |
+
+---
+
+## 十一、文件清单
+
+```
+数据库:
+  supabase/sql/06_assignments/2_tables.sql                 -- assignment_submissions, student_answers 表
+  supabase/sql/06_assignments/3_functions.sql               -- teacher_* + student 框架 RPC 函数
+  supabase/sql/06_assignments/6_rls.sql                     -- RLS 策略
+  supabase/migrations/20260325_assignments.sql              -- 初始迁移
+  supabase/migrations/20260328_student_assignments.sql      -- student_* RPC 函数初始版
+  supabase/migrations/20260329_fill_blank_auto_grade.sql    -- 填空题自动评分 + student_get_result 即显修复
+  supabase/migrations/20260329_audit_fixes.sql              -- D-01/DB-02/D-03/S-01 修复
+
+后端:
+  server/src/api/assignments.py                   -- POST /api/assignments/grade
+  server/src/services/assignment_grader.py        -- Ollama AI 批改服务
+
 前端:
-  - 页面加载时计算剩余时间，启动倒计时
-  - 剩余 30min / 10min / 1min 时 Toast 提醒
-  - 截止后禁用「提交」「保存」按钮，显示已截止提示
-
-后端（强制校验）:
-  - student_submit() 中检查 deadline
-  - student_save_answers() 不检查 deadline（仅前端提示）
+  web/src/types/assignment.ts                     -- 学生类型定义
+  web/src/services/studentAssignments.ts          -- 学生服务层（7 函数 + Row 接口 + 错误映射）
+  web/src/pages/student/AssignmentsPage.tsx        -- 作业列表（约 200 行）
+  web/src/pages/student/AssignmentAnswerPage.tsx   -- 作答页（约 660 行，含 5 题型组件）
+  web/src/pages/student/AssignmentResultPage.tsx   -- 成绩页（约 380 行，含轮询 + AI 维度展示）
 ```
-
-### 11.3 并发安全
-
-```
-- student_start_submission 使用 ON CONFLICT DO NOTHING 保证幂等
-- student_save_answers 使用 UPSERT（INSERT ... ON CONFLICT UPDATE）
-- student_submit 使用 status 转换校验（仅 in_progress → submitted）
-```
-
-### 11.4 前端组件复用
-
-```
-可复用的现有组件:
-  - QuestionEditor → 改造为 QuestionViewer（只读）+ QuestionAnswerer（作答）
-  - CommonTable → 作业列表、批改列表
-  - formatAnswer() → 成绩页展示正确答案
-
-需新建组件:
-  - QuestionAnswerer — 根据题型渲染不同的作答控件
-  - QuestionNavigator — 题目侧边导航面板
-  - GradingPanel — 教师复核评分面板（含 AI 评分展示 + 一键采纳）
-  - CountdownTimer — 截止时间倒计时
-  - AiFeedbackCard — AI 反馈展示卡片（学生端 + 教师端复用）
-```
-
-### 11.5 AI 批改服务架构
-
-```
-server/src/services/assignment_grader.py
-  │
-  ├─ grade_submission(submission_id)
-  │     └─ 查询 questions + student_answers
-  │     └─ 分类: 客观题 / 填空题 / 简答题
-  │     └─ 逐题调用对应 AI 批改函数
-  │     └─ 写回结果 + 更新 status
-  │
-  ├─ _grade_objective(question, answer)    # 客观题: 生成 ai_feedback
-  ├─ _grade_fill_blank(question, answer)    # 填空题: 语义匹配 + 评分
-  ├─ _grade_short_answer(question, answer)  # 简答题: 综合评分
-  │
-  └─ _call_ollama_for_grading(prompt)  # 复用现有 Ollama 流式调用模式
-       model: qwen2.5:7b
-       format: json
-       stream: True
-       temperature: 0.3
-```
-
----
-
-## 十二、开放问题
-
-| # | 问题 | 建议 |
-|---|------|------|
-| 1 | 学生提交后是否立刻可以看到客观题得分？ | 是，客观题精确匹配后立即可见；AI 反馈需等 30-90s |
-| 2 | 截止后未提交的学生怎么处理？ | 显示「已截止（未提交）」状态，得分为 0 |
-| 3 | 教师是否可以延长截止时间？ | 已实现（teacher_update_deadline）|
-| 4 | 是否支持附件作答（上传文件回答）？| Phase 2，本期仅文本作答 |
-| 5 | 多选题「漏选给半分」是否可配置？ | 本期固定规则，Phase 2 可配置 |
-| 6 | AI 批改失败时如何处理？ | 客观题保持精确匹配分数；填空回退文本匹配；简答记0分等教师手动评 |
-| 7 | AI 评分与教师评分偏差大怎么办？ | 教师始终有最终修改权；ai_score 保留作对比 |
-| 8 | Ollama 服务不可用时是否阻塞提交？ | 不阻塞。阶段一 SQL 精确匹配正常完成，AI 批改失败时走 fallback |
