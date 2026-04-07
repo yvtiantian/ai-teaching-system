@@ -6,6 +6,8 @@ FILL_BLANK_FIX_SQL = REPO_ROOT / "supabase" / "migrations" / "20260405_fix_fill_
 STUDENT_REVIEW_STATUS_SQL = REPO_ROOT / "supabase" / "migrations" / "20260405_student_review_status_display_fix.sql"
 UNANSWERED_FIX_SQL = REPO_ROOT / "supabase" / "migrations" / "20260406_fix_unanswered_submission_visibility.sql"
 AUTO_GRADED_STATUS_SQL = REPO_ROOT / "supabase" / "migrations" / "20260406_add_auto_graded_status.sql"
+PENDING_SHORT_ANSWER_RESULT_SQL = REPO_ROOT / "supabase" / "migrations" / "20260406_fix_pending_short_answer_result_status.sql"
+TEACHER_SUBMISSION_TOTAL_SQL = REPO_ROOT / "supabase" / "migrations" / "20260406_teacher_submission_list_show_total_score.sql"
 
 
 def test_student_submit_keeps_fill_blank_in_auto_grading_path() -> None:
@@ -55,6 +57,15 @@ def test_teacher_and_admin_detail_include_unanswered_questions() -> None:
     assert "WHERE q.assignment_id = (v_submission->>'assignment_id')::UUID" in sql
 
 
+def test_student_get_result_keeps_pending_short_answer_unjudged() -> None:
+    sql = PENDING_SHORT_ANSWER_RESULT_SQL.read_text(encoding="utf-8")
+
+    assert "v_submission.status IN ('submitted', 'ai_grading')" in sql
+    assert "COALESCE(sa.graded_by, 'pending') = 'pending'" in sql
+    assert "THEN NULL" in sql
+    assert "WHEN sa.id IS NULL THEN false" in sql
+
+
 def test_assignment_submissions_status_supports_auto_graded() -> None:
     sql = AUTO_GRADED_STATUS_SQL.read_text(encoding="utf-8")
 
@@ -82,4 +93,11 @@ def test_teacher_and_admin_stats_split_auto_graded_and_ai_graded() -> None:
     assert "'auto_graded_count',   v_auto_graded" in sql
     assert "status IN ('submitted', 'ai_grading', 'auto_graded', 'ai_graded', 'graded')" in sql
     assert "'auto_graded_count',  COALESCE(SUM(CASE WHEN s.status = 'auto_graded' THEN 1 END), 0)" in sql
+
+
+def test_teacher_list_submissions_returns_assignment_total_score() -> None:
+    sql = TEACHER_SUBMISSION_TOTAL_SQL.read_text(encoding="utf-8")
+
+    assert "'assignment_total_score', v_assignment.total_score" in sql
+    assert "'total_score',            sub.total_score" in sql
 

@@ -113,6 +113,7 @@ interface SubmissionItemRow {
   status: string;
   submitted_at: string | null;
   total_score: number | null;
+  assignment_total_score: number;
 }
 
 // ── 映射（snake → camelCase） ─────────────────────────────
@@ -203,8 +204,8 @@ function toStats(row: StatsRow): AssignmentStats {
     totalStudents: row.total_students,
     submittedCount: row.submitted_count,
     notSubmittedCount: row.not_submitted_count,
-    autoGradedCount: row.auto_graded_count ?? 0,
-    aiGradedCount: row.ai_graded_count ?? 0,
+    reviewableCount: row.auto_graded_count ?? 0,
+    reviewPendingCount: row.ai_graded_count ?? 0,
     gradedCount: row.graded_count,
     submissionRate: row.submission_rate,
   };
@@ -219,6 +220,7 @@ function toSubmission(row: SubmissionItemRow): SubmissionSummary {
     status: row.status,
     submittedAt: row.submitted_at,
     totalScore: row.total_score,
+    assignmentTotalScore: Number(row.assignment_total_score) || 0,
   };
 }
 

@@ -70,7 +70,7 @@ const DEFAULT_AI_PROMPT = `请确保题目:
 - 题目不重复或过于相似`;
 
 const DEFAULT_QUESTION_CONFIG: QuestionConfig = {
-  single_choice: { count: 0, scorePerQuestion: 2 },
+  single_choice: { count: 5, scorePerQuestion: 2 },
   multiple_choice: { count: 0, scorePerQuestion: 4 },
   fill_blank: { count: 0, scorePerQuestion: 3 },
   true_false: { count: 0, scorePerQuestion: 2 },

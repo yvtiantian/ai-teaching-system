@@ -31,16 +31,6 @@ class SupabaseSettings(BaseModel):
     jwt_secret: str = ""
 
 
-class OllamaSettings(BaseModel):
-    """Ollama LLM 配置（AI 批改）"""
-
-    base_url: str = "http://localhost:11434"
-    model: str = "qwen2.5:7b"
-    temperature: float = 0.3
-    timeout_per_question: int = 60
-    job_timeout: int = 300
-
-
 class DatabaseSettings(BaseModel):
     """本地 SQLite 数据库配置（agno session 存储）"""
 
@@ -61,7 +51,6 @@ class Settings(BaseSettings):
     deepseek: DeepSeekSettings = DeepSeekSettings()
     supabase: SupabaseSettings = SupabaseSettings()
     database: DatabaseSettings = DatabaseSettings()
-    ollama: OllamaSettings = OllamaSettings()
 
 
 settings = Settings()

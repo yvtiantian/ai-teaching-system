@@ -32,8 +32,8 @@ const STATUS_TAG: Record<string, { label: string; color: string }> = {
   in_progress: { label: "作答中", color: "processing" },
   submitted: { label: "已提交", color: "green" },
   ai_grading: { label: "AI批改中", color: "orange" },
-  auto_graded: { label: "自动判分待复核", color: "geekblue" },
-  ai_graded: { label: "AI评分待复核", color: "cyan" },
+  auto_graded: { label: "自动判分可复核", color: "geekblue" },
+  ai_graded: { label: "AI待复核", color: "cyan" },
   graded: { label: "已复核", color: "blue" },
 };
 
@@ -105,7 +105,7 @@ export default function AssignmentStatsPage() {
       {
         title: "状态",
         dataIndex: "status",
-        width: 100,
+        width: 120,
         render: (status: string) => {
           const info = STATUS_TAG[status] ?? { label: status, color: "default" };
           return <Tag color={info.color}>{info.label}</Tag>;
@@ -120,9 +120,10 @@ export default function AssignmentStatsPage() {
       {
         title: "得分",
         dataIndex: "totalScore",
-        width: 80,
+        width: 120,
         align: "center",
-        render: (v: number | null) => (v != null ? v : "-"),
+        render: (v: number | null, record: SubmissionSummary) =>
+          `${v != null ? v : "-"} / ${record.assignmentTotalScore}`,
       },
       {
         title: "操作",
@@ -175,7 +176,7 @@ export default function AssignmentStatsPage() {
 
       {/* 统计卡片 */}
       {stats && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-6">
           <Card size="small">
             <Statistic title="课程总人数" value={stats.totalStudents} />
           </Card>
@@ -186,7 +187,10 @@ export default function AssignmentStatsPage() {
             <Statistic title="未提交" value={stats.notSubmittedCount} />
           </Card>
           <Card size="small">
-            <Statistic title="待复核" value={stats.autoGradedCount + stats.aiGradedCount} valueStyle={{ color: stats.autoGradedCount + stats.aiGradedCount > 0 ? "#0891b2" : undefined }} />
+            <Statistic title="可复核" value={stats.reviewableCount} valueStyle={{ color: stats.reviewableCount > 0 ? "#1d4ed8" : undefined }} />
+          </Card>
+          <Card size="small">
+            <Statistic title="待复核" value={stats.reviewPendingCount} valueStyle={{ color: stats.reviewPendingCount > 0 ? "#0891b2" : undefined }} />
           </Card>
           <Card size="small">
             <Statistic
@@ -216,8 +220,8 @@ export default function AssignmentStatsPage() {
           {[
             { value: undefined, label: "全部" },
             { value: "submitted", label: "已提交" },
-            { value: "auto_graded", label: "自动判分待复核" },
-            { value: "ai_graded", label: "AI评分待复核" },
+            { value: "auto_graded", label: "自动判分可复核" },
+            { value: "ai_graded", label: "AI待复核" },
             { value: "not_started", label: "未提交" },
             { value: "graded", label: "已复核" },
           ].map((item) => (

@@ -1,4 +1,4 @@
-"""AI 作业批改服务 — 仅调用 Ollama 对简答题进行 AI 评分"""
+"""AI 作业批改服务 — 调用 DeepSeek 云端 API 对简答题进行 AI 评分"""
 
 from __future__ import annotations
 
@@ -13,12 +13,13 @@ from loguru import logger
 from src.core.settings import settings
 from src.core.supabase_client import get_supabase_client
 
-# ── Ollama 配置 ──────────────────────────────────────────
+# ── DeepSeek 云端 配置 ────────────────────────────────────
 
-_OLLAMA_BASE = settings.ollama.base_url.rstrip("/")
-_OLLAMA_MODEL = settings.ollama.model
-_OLLAMA_TIMEOUT = settings.ollama.timeout_per_question
-_JOB_TIMEOUT = settings.ollama.job_timeout
+_DEEPSEEK_BASE = settings.deepseek.base_url.rstrip("/")
+_DEEPSEEK_MODEL = settings.deepseek.default_model
+_DEEPSEEK_API_KEY = settings.deepseek.api_key
+_GRADING_TIMEOUT = 60  # 每题超时秒数
+_JOB_TIMEOUT = 300     # 整体超时秒数
 
 # ── Prompt 模板 ──────────────────────────────────────────
 
@@ -71,7 +72,7 @@ async def grade_submission(submission_id: str) -> dict[str, Any]:
     流程：
     1. 从 DB 加载 submission + questions + student_answers
     2. 将 status 设为 ai_grading
-    3. 逐题调用 Ollama 生成反馈 / 评分
+    3. 逐题调用 deepseek 生成反馈 / 评分
     4. 写回每题的 ai_score / ai_feedback / ai_detail
     5. 汇总分数，将 status 设为 ai_graded
     """
@@ -142,7 +143,7 @@ async def grade_submission(submission_id: str) -> dict[str, Any]:
         try:
             result = await asyncio.wait_for(
                 _grade_short_answer(question, ans),
-                timeout=_OLLAMA_TIMEOUT,
+                timeout=_GRADING_TIMEOUT,
             )
             await _save_answer_result(sb, str(ans["id"]), result)
             total_ai_score += result.get("score", 0)
@@ -218,7 +219,7 @@ async def _grade_short_answer(
         max_score=max_score,
     )
 
-    raw = await _call_ollama(prompt, json_mode=True)
+    raw = await _call_deepseek(prompt, json_mode=True)
     parsed = _parse_json(raw)
 
     if parsed:
@@ -278,13 +279,13 @@ def _has_meaningful_short_answer(answer: Any) -> bool:
 
 
 # ══════════════════════════════════════════════════════════
-# Ollama 调用
+# DeepSeek 云端 API 调用
 # ══════════════════════════════════════════════════════════
 
-async def _call_ollama(prompt: str, *, json_mode: bool = False) -> str:
-    """调用 Ollama OpenAI-compatible API，流式读取。"""
+async def _call_deepseek(prompt: str, *, json_mode: bool = False) -> str:
+    """调用 DeepSeek 云端 OpenAI-compatible API，流式读取。"""
     payload: dict[str, Any] = {
-        "model": _OLLAMA_MODEL,
+        "model": _DEEPSEEK_MODEL,
         "messages": [
             {"role": "user", "content": prompt},
         ],
@@ -294,14 +295,20 @@ async def _call_ollama(prompt: str, *, json_mode: bool = False) -> str:
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
-    timeout = httpx.Timeout(connect=30.0, read=float(_OLLAMA_TIMEOUT), write=30.0, pool=30.0)
+    headers = {
+        "Authorization": f"Bearer {_DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    timeout = httpx.Timeout(connect=30.0, read=float(_GRADING_TIMEOUT), write=30.0, pool=30.0)
     content_parts: list[str] = []
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream(
             "POST",
-            f"{_OLLAMA_BASE}/v1/chat/completions",
+            f"{_DEEPSEEK_BASE}/chat/completions",
             json=payload,
+            headers=headers,
         ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -321,7 +328,7 @@ async def _call_ollama(prompt: str, *, json_mode: bool = False) -> str:
 
     content = "".join(content_parts)
     if not content:
-        raise RuntimeError("Ollama 返回空内容")
+        raise RuntimeError("DeepSeek 返回空内容")
     return content
 
 

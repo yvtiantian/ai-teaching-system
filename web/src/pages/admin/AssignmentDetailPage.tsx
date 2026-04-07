@@ -50,16 +50,16 @@ const SUBMISSION_STATUS_TAG: Record<SubmissionStatus, { color: string; label: st
   in_progress: { color: "processing", label: "作答中" },
   submitted: { color: "blue", label: "已提交" },
   ai_grading: { color: "processing", label: "AI批改中" },
-  auto_graded: { color: "geekblue", label: "自动判分待复核" },
-  ai_graded: { color: "orange", label: "AI评分待复核" },
+  auto_graded: { color: "geekblue", label: "自动判分可复核" },
+  ai_graded: { color: "orange", label: "AI待复核" },
   graded: { color: "green", label: "已批改" },
 };
 
 const SUBMISSION_STATUS_OPTIONS: Array<{ label: string; value: SubmissionStatus }> = [
   { label: "已提交", value: "submitted" },
   { label: "AI批改中", value: "ai_grading" },
-  { label: "自动判分待复核", value: "auto_graded" },
-  { label: "AI评分待复核", value: "ai_graded" },
+  { label: "自动判分可复核", value: "auto_graded" },
+  { label: "AI待复核", value: "ai_graded" },
   { label: "已批改", value: "graded" },
 ];
 
@@ -290,7 +290,7 @@ export default function AdminAssignmentDetailPage() {
                   )}
                 </Descriptions>
 
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
                   <Card size="small">
                     <Statistic title="课程学生数" value={stats.studentCount} />
                   </Card>
@@ -298,7 +298,10 @@ export default function AdminAssignmentDetailPage() {
                     <Statistic title="已提交" value={stats.submittedCount} />
                   </Card>
                   <Card size="small">
-                    <Statistic title="待复核" value={stats.autoGradedCount + stats.aiGradedCount} />
+                    <Statistic title="可复核" value={stats.reviewableCount} />
+                  </Card>
+                  <Card size="small">
+                    <Statistic title="待复核" value={stats.reviewPendingCount} />
                   </Card>
                   <Card size="small">
                     <Statistic title="已批改" value={stats.gradedCount} />

@@ -39,7 +39,7 @@ function getDisplayStatus(
   if (sub === "graded") {
     return { label: record.teacherReviewed ? "已复核" : "已判分", color: "green" };
   }
-  if (sub === "auto_graded") return { label: "待复核", color: "cyan" };
+  if (sub === "auto_graded") return { label: "已判分", color: "green" };
   if (sub === "ai_graded") return { label: "待复核", color: "cyan" };
   if (sub === "ai_grading") return { label: "AI批改中", color: "orange" };
   if (sub === "submitted") return { label: "已提交", color: "orange" };
@@ -64,6 +64,10 @@ function canAnswer(record: StudentAssignment): boolean {
 function canViewResult(record: StudentAssignment): boolean {
   const sub = record.submissionStatus;
   return ["submitted", "ai_grading", "auto_graded", "ai_graded", "graded"].includes(sub);
+}
+
+function shouldHideStudentScore(status: StudentAssignment["submissionStatus"]): boolean {
+  return status === "submitted" || status === "ai_grading" || status === "ai_graded";
 }
 
 export default function StudentAssignmentsPage() {
@@ -173,6 +177,10 @@ export default function StudentAssignmentsPage() {
         width: 100,
         align: "center",
         render: (_: unknown, record: StudentAssignment) => {
+          if (shouldHideStudentScore(record.submissionStatus)) {
+            return `- / ${record.totalScore}`;
+          }
+
           if (
             record.submissionScore != null &&
             ["submitted", "ai_grading", "auto_graded", "ai_graded", "graded"].includes(

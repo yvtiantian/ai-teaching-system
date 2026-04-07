@@ -31,6 +31,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { toErrorMessage } from "@/lib/utils";
 import type {
+  QuestionOption,
   QuestionType,
   SubmissionDetail,
   SubmissionDetailAnswer,
@@ -49,10 +50,14 @@ const TYPE_LABEL: Record<QuestionType, string> = {
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {
   submitted: { text: "已提交", color: "orange" },
   ai_grading: { text: "AI批改中", color: "orange" },
-  auto_graded: { text: "自动判分待复核", color: "geekblue" },
-  ai_graded: { text: "AI评分待复核", color: "cyan" },
+  auto_graded: { text: "自动判分可复核", color: "geekblue" },
+  ai_graded: { text: "AI待复核", color: "cyan" },
   graded: { text: "已复核", color: "green" },
 };
+
+function isChoiceQuestion(questionType: QuestionType): boolean {
+  return questionType === "single_choice" || questionType === "multiple_choice";
+}
 
 function formatAnswer(answer: unknown, questionType: QuestionType): string {
   if (answer == null) return "（未作答）";
@@ -113,6 +118,8 @@ export default function TeacherGradingDetailPage() {
   // 教师修改的分数/评语缓存
   const [editScores, setEditScores] = useState<Record<string, number>>({});
   const [editComments, setEditComments] = useState<Record<string, string>>({});
+  const [savedScores, setSavedScores] = useState<Record<string, number>>({});
+  const [savedComments, setSavedComments] = useState<Record<string, string>>({});
 
   const canAccess = authInitialized && user?.role === "teacher";
 
@@ -132,6 +139,8 @@ export default function TeacherGradingDetailPage() {
       }
       setEditScores(scores);
       setEditComments(comments);
+      setSavedScores(scores);
+      setSavedComments(comments);
     } catch (error) {
       message.error(toErrorMessage(error, "加载提交详情失败"));
     } finally {
@@ -149,22 +158,57 @@ export default function TeacherGradingDetailPage() {
     if (canAccess && submissionId) void loadDetail();
   }, [canAccess, submissionId, loadDetail]);
 
-  // 保存单题评分
-  const handleSaveAnswer = useCallback(async (answerId: string) => {
-    const score = editScores[answerId];
-    const comment = editComments[answerId] || undefined;
-    if (score == null) return;
-    setBusy(true);
-    try {
-      await teacherGradeAnswer(answerId, score, comment);
-      message.success("已保存");
-      await loadDetail();
-    } catch (error) {
-      message.error(toErrorMessage(error, "保存失败"));
-    } finally {
-      setBusy(false);
+  const getDirtyAnswers = useCallback(() => {
+    if (!detail) return [] as Array<{ answerId: string; score: number; comment: string }>;
+
+    return detail.answers
+      .filter(
+        (answer) =>
+          Boolean(answer.answerId) &&
+          (answer.questionType === "fill_blank" || answer.questionType === "short_answer")
+      )
+      .map((answer) => {
+        const answerId = answer.answerId as string;
+        return {
+          answerId,
+          score: editScores[answerId] ?? answer.score,
+          comment: editComments[answerId] ?? "",
+          savedScore: savedScores[answerId] ?? answer.score,
+          savedComment: savedComments[answerId] ?? (answer.teacherComment ?? ""),
+        };
+      })
+      .filter(
+        (answer) =>
+          answer.score !== answer.savedScore || answer.comment !== answer.savedComment
+      )
+      .map(({ answerId, score, comment }) => ({ answerId, score, comment }));
+  }, [detail, editComments, editScores, savedComments, savedScores]);
+
+  const saveDirtyAnswers = useCallback(async () => {
+    const dirtyAnswers = getDirtyAnswers();
+    if (dirtyAnswers.length === 0) return 0;
+
+    for (const answer of dirtyAnswers) {
+      await teacherGradeAnswer(answer.answerId, answer.score, answer.comment);
     }
-  }, [editScores, editComments, loadDetail]);
+
+    setSavedScores((prev) => {
+      const next = { ...prev };
+      for (const answer of dirtyAnswers) {
+        next[answer.answerId] = answer.score;
+      }
+      return next;
+    });
+    setSavedComments((prev) => {
+      const next = { ...prev };
+      for (const answer of dirtyAnswers) {
+        next[answer.answerId] = answer.comment;
+      }
+      return next;
+    });
+
+    return dirtyAnswers.length;
+  }, [getDirtyAnswers]);
 
   // 一键采纳
   const handleAcceptAll = useCallback(async () => {
@@ -194,14 +238,15 @@ export default function TeacherGradingDetailPage() {
     if (!submissionId) return;
     Modal.confirm({
       title: "确认复核完成",
-      content: "复核完成后学生将看到完整成绩、正确答案和解析。确认完成？",
+      content: "确认前会自动保存本页尚未提交的评分修改。复核完成后学生将看到完整成绩、正确答案和解析。确认完成？",
       okText: "确认完成",
       cancelText: "取消",
       onOk: async () => {
         setBusy(true);
         try {
+          const savedCount = await saveDirtyAnswers();
           await teacherFinalizeGrading(submissionId);
-          message.success("复核已完成");
+          message.success(savedCount > 0 ? `已自动保存 ${savedCount} 处修改并完成复核` : "复核已完成");
           await loadDetail();
         } catch (error) {
           message.error(toErrorMessage(error, "确认复核失败"));
@@ -210,7 +255,7 @@ export default function TeacherGradingDetailPage() {
         }
       },
     });
-  }, [submissionId, loadDetail]);
+  }, [submissionId, loadDetail, saveDirtyAnswers]);
 
   if (loading || !canAccess) {
     return <div className="flex h-full items-center justify-center"><Spin size="large" /></div>;
@@ -233,6 +278,7 @@ export default function TeacherGradingDetailPage() {
     (a) => a.aiScore != null && a.gradedBy !== "teacher"
   );
   const showAcceptAll = !isFinalized && hasSubjective && hasAiScores;
+  const dirtyCount = getDirtyAnswers().length;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto pb-4">
@@ -282,6 +328,9 @@ export default function TeacherGradingDetailPage() {
                   一键采纳 AI 评分
                 </Button>
               )}
+              {dirtyCount > 0 && (
+                <Tag color="gold">有 {dirtyCount} 处修改待保存</Tag>
+              )}
               <Button type="primary" icon={<CheckOutlined />} onClick={handleFinalize} disabled={busy || isAiGrading}>
                 确认复核完成
               </Button>
@@ -314,11 +363,6 @@ export default function TeacherGradingDetailPage() {
               onCommentChange={(v) =>
                 setEditComments((prev) => ({ ...prev, [answerKey]: v }))
               }
-              onSave={() => {
-                if (ans.answerId) {
-                  void handleSaveAnswer(ans.answerId);
-                }
-              }}
             />
           );
         })}
@@ -339,7 +383,6 @@ function AnswerGradeCard({
   editComment,
   onScoreChange,
   onCommentChange,
-  onSave,
 }: {
   index: number;
   answer: SubmissionDetailAnswer;
@@ -350,7 +393,6 @@ function AnswerGradeCard({
   editComment: string;
   onScoreChange: (v: number) => void;
   onCommentChange: (v: string) => void;
-  onSave: () => void;
 }) {
   const gradedInfo = getGradingSourceTagInfo({
     gradedBy: answer.gradedBy,
@@ -375,6 +417,19 @@ function AnswerGradeCard({
 
       {/* 题目内容 */}
       <div className="mb-3 whitespace-pre-wrap text-gray-800">{answer.content}</div>
+
+      {isChoiceQuestion(answer.questionType) && answer.options && answer.options.length > 0 && (
+        <div className="mb-3 rounded bg-white text-sm">
+          <div className="space-y-1 text-gray-500">
+            {answer.options.map((option: QuestionOption) => (
+              <div key={option.label}>
+                <span className="font-medium">{option.label}. </span>
+                <span>{option.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 答案对比 */}
       <div className="space-y-1 rounded bg-gray-50 p-3 text-sm">
@@ -438,14 +493,9 @@ function AnswerGradeCard({
               size="small"
             />
           </div>
-          <Button
-            type="primary"
-            size="small"
-            onClick={onSave}
-            loading={busy}
-          >
-            保存
-          </Button>
+          <div className="text-xs text-gray-500">
+            修改会在点击“确认复核完成”时自动保存
+          </div>
         </div>
       )}
 

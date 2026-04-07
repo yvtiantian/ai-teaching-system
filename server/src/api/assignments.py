@@ -1,14 +1,17 @@
-"""Assignments API — AI 题目生成 & AI 批改端点"""
+"""Assignments API — AI 题目生成 & AI 批改 & AI 解惑端点"""
 
 import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.core.supabase_client import get_supabase_client
 from src.services.assignment_generator import generate_questions
 from src.services.assignment_grader import grade_submission
+from src.services.question_tutor import load_question_context, stream_tutor_chat
 
 router = APIRouter(prefix="/api/assignments", tags=["assignments"])
 
@@ -153,3 +156,55 @@ async def _run_grading(submission_id: str) -> None:
             )
         except Exception:
             logger.error("标记 ai_graded 也失败: submission={}", submission_id)
+
+
+# ── AI 解惑（题目辅导） ─────────────────────────────────
+
+class TutorMessage(BaseModel):
+    role: str = Field(pattern=r"^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class TutorRequest(BaseModel):
+    question_id: str
+    submission_id: str
+    messages: list[TutorMessage] = Field(min_length=1, max_length=40)
+
+
+@router.post("/question-tutor")
+async def question_tutor_endpoint(
+    body: TutorRequest,
+    user_id: str = Depends(_get_current_user_id),
+):
+    """题目 AI 解惑 — 流式返回 SSE。"""
+    try:
+        context = await load_question_context(
+            question_id=body.question_id,
+            submission_id=body.submission_id,
+            student_id=user_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    async def event_stream():
+        try:
+            async for token in stream_tutor_chat(context, messages):
+                yield f"data: {json.dumps({'content': token}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.error("AI 解惑流式回复异常: {}", exc)
+            yield f"data: {json.dumps({'error': 'AI 回复异常，请稍后重试'}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

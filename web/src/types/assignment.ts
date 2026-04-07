@@ -81,8 +81,8 @@ export interface AssignmentStats {
   totalStudents: number;
   submittedCount: number;
   notSubmittedCount: number;
-  autoGradedCount: number;
-  aiGradedCount: number;
+  reviewableCount: number;
+  reviewPendingCount: number;
   gradedCount: number;
   submissionRate: number;
 }
@@ -95,6 +95,7 @@ export interface SubmissionSummary {
   status: string;
   submittedAt: string | null;
   totalScore: number | null;
+  assignmentTotalScore: number;
 }
 
 // ── 变更载荷 ─────────────────────────────────────────────
@@ -300,8 +301,8 @@ export interface AdminAssignmentListResult {
 export interface AdminAssignmentStats {
   studentCount: number;
   submittedCount: number;
-  autoGradedCount: number;
-  aiGradedCount: number;
+  reviewableCount: number;
+  reviewPendingCount: number;
   gradedCount: number;
   avgScore: number | null;
   maxScore: number | null;
