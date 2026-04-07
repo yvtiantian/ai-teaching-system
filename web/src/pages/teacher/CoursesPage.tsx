@@ -140,6 +140,7 @@ export default function TeacherCoursesPage() {
       Modal.confirm({
         title: "归档课程",
         content: `确定归档「${course.name}」？归档后学生将无法通过课程码加入。`,
+        centered: true,
         okText: "归档",
         cancelText: "取消",
         onOk: async () => {
@@ -174,6 +175,7 @@ export default function TeacherCoursesPage() {
       Modal.confirm({
         title: "重新生成课程码",
         content: `确定重新生成「${course.name}」的课程码？旧课程码将立即失效。`,
+        centered: true,
         okText: "确定",
         cancelText: "取消",
         onOk: async () => {
@@ -336,6 +338,7 @@ export default function TeacherCoursesPage() {
       <Modal
         title="创建课程"
         open={createOpen}
+        centered
         onCancel={() => {
           setCreateOpen(false);
           createForm.resetFields();
@@ -371,6 +374,7 @@ export default function TeacherCoursesPage() {
       <Modal
         title="编辑课程"
         open={Boolean(editCourse)}
+        centered
         onCancel={() => setEditCourse(null)}
         onOk={() => void handleEdit()}
         confirmLoading={submittingEdit}

@@ -268,6 +268,7 @@ export default function StudentAssignmentAnswerPage() {
     Modal.confirm({
       title: "提交作业",
       content: confirmContent,
+      centered: true,
       okText: "确定提交",
       cancelText: "继续答题",
       onOk: async () => {

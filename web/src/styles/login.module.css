@@ -149,7 +149,9 @@
   margin-top: 0;
 }
 
-.authCard {
+.authCard,
+.authCard:global(.ant-card),
+.authCard:global(.ant-card-borderless) {
   width: 100%;
   border: 0 !important;
   background: transparent !important;

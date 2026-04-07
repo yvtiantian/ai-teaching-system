@@ -571,6 +571,7 @@ export default function AdminUsersPage() {
       <Modal
         title="新增用户"
         open={createOpen}
+        centered
         onCancel={() => {
           setCreateOpen(false);
           createForm.resetFields();
@@ -639,6 +640,7 @@ export default function AdminUsersPage() {
       <Modal
         title="编辑用户"
         open={Boolean(editUser)}
+        centered
         onCancel={() => setEditUser(null)}
         onOk={() => void handleEdit()}
         confirmLoading={submittingEdit}
@@ -736,6 +738,7 @@ export default function AdminUsersPage() {
       <Modal
         title="重置密码"
         open={Boolean(resetTargetUser)}
+        centered
         onCancel={() => {
           setResetTargetUser(null);
           resetPasswordForm.resetFields();

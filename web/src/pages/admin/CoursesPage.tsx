@@ -190,6 +190,7 @@ export default function AdminCoursesPage() {
       Modal.confirm({
         title: "删除课程",
         content: `确定删除「${course.name}」？此操作不可恢复，课程下的所有选课记录将被同步删除。`,
+        centered: true,
         okText: "删除",
         okType: "danger",
         cancelText: "取消",
@@ -371,6 +372,7 @@ export default function AdminCoursesPage() {
       <Modal
         title="编辑课程"
         open={Boolean(editCourse)}
+        centered
         onCancel={() => setEditCourse(null)}
         onOk={() => void handleEdit()}
         confirmLoading={submittingEdit}

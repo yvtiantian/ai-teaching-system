@@ -92,6 +92,7 @@ export default function StudentCoursesPage() {
       Modal.confirm({
         title: "退出课程",
         content: `确定退出「${course.courseName}」？`,
+        centered: true,
         okText: "退出",
         okType: "danger",
         cancelText: "取消",
@@ -193,6 +194,7 @@ export default function StudentCoursesPage() {
       <Modal
         title="加入课程"
         open={joinOpen}
+        centered
         onCancel={() => {
           setJoinOpen(false);
           joinForm.resetFields();

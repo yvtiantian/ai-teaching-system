@@ -417,6 +417,7 @@ function CreateAssignmentInner() {
       <Modal
         title="手动添加题目"
         open={!!addingQuestion}
+        centered
         onCancel={() => setAddingQuestion(null)}
         footer={null}
         width={640}
@@ -435,6 +436,7 @@ function CreateAssignmentInner() {
       <Modal
         title="编辑题目"
         open={editingIndex !== null}
+        centered
         onCancel={() => setEditingIndex(null)}
         footer={null}
         width={640}

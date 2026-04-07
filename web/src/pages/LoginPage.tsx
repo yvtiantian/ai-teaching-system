@@ -247,7 +247,7 @@ export default function LoginPage() {
         </div>
 
         <div className={styles.formWrap}>
-          <Card className={styles.authCard} bordered={false}>
+          <Card className={styles.authCard} variant="borderless">
             {!isSignup ? (
               <div className={styles.step}>
                 <div className={styles.titleBlock}>

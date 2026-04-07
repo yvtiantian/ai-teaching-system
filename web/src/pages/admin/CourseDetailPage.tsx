@@ -78,6 +78,7 @@ export default function AdminCourseDetailPage() {
       Modal.confirm({
         title: "移除学生",
         content: `确定将「${resolveDisplayName(member)}」移出该课程？`,
+        centered: true,
         okText: "移除",
         okType: "danger",
         cancelText: "取消",

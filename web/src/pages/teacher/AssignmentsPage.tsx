@@ -115,6 +115,7 @@ export default function TeacherAssignmentsPage() {
       Modal.confirm({
         title: "删除作业",
         content: `确定删除「${record.title}」？此操作不可撤销。`,
+        centered: true,
         okText: "删除",
         okButtonProps: { danger: true },
         cancelText: "取消",
@@ -137,6 +138,7 @@ export default function TeacherAssignmentsPage() {
       Modal.confirm({
         title: "关闭作业",
         content: `确定关闭「${record.title}」？关闭后学生将无法继续提交。`,
+        centered: true,
         okText: "关闭",
         cancelText: "取消",
         onOk: async () => {
@@ -170,6 +172,7 @@ export default function TeacherAssignmentsPage() {
         Modal.confirm({
           title: "重新打开作业",
           content: `确定重新打开「${record.title}」？打开后学生可继续提交。`,
+          centered: true,
           okText: "打开",
           cancelText: "取消",
           onOk: async () => {
@@ -411,6 +414,7 @@ export default function TeacherAssignmentsPage() {
       <Modal
         title="修改截止时间"
         open={!!deadlineTarget}
+        centered
         onCancel={() => setDeadlineTarget(null)}
         onOk={handleDeadlineSave}
         confirmLoading={deadlineSaving}
@@ -433,6 +437,7 @@ export default function TeacherAssignmentsPage() {
       <Modal
         title="重新打开作业"
         open={!!reopenTarget}
+        centered
         onCancel={() => setReopenTarget(null)}
         onOk={handleReopenSave}
         confirmLoading={reopenSaving}

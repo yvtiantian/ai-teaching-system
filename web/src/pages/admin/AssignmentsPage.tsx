@@ -202,6 +202,7 @@ export default function AdminAssignmentsPage() {
       Modal.confirm({
         title: "删除作业",
         content: `确定删除「${record.title}」？此操作不可恢复，该作业下所有题目、学生提交记录及答案将被永久删除。`,
+        centered: true,
         okText: "删除",
         okType: "danger",
         cancelText: "取消",
@@ -375,6 +376,7 @@ export default function AdminAssignmentsPage() {
       <Modal
         title={deadlineTarget?.status === "closed" ? "重新开放作业" : "修改截止日期"}
         open={Boolean(deadlineTarget)}
+        centered
         onCancel={() => setDeadlineTarget(null)}
         onOk={() => void handleDeadlineConfirm()}
         confirmLoading={submittingDeadline}

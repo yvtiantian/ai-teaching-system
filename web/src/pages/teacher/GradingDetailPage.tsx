@@ -216,6 +216,7 @@ export default function TeacherGradingDetailPage() {
     Modal.confirm({
       title: "一键采纳 AI 评分",
       content: "将所有题目的分数设为 AI 评分，确认采纳？",
+      centered: true,
       okText: "确认采纳",
       cancelText: "取消",
       onOk: async () => {
@@ -239,6 +240,7 @@ export default function TeacherGradingDetailPage() {
     Modal.confirm({
       title: "确认复核完成",
       content: "确认前会自动保存本页尚未提交的评分修改。复核完成后学生将看到完整成绩、正确答案和解析。确认完成？",
+      centered: true,
       okText: "确认完成",
       cancelText: "取消",
       onOk: async () => {
