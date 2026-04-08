@@ -70,6 +70,10 @@ function isChoiceQuestion(type: QuestionType): boolean {
   return type === "single_choice" || type === "multiple_choice";
 }
 
+function isTextDistributionQuestion(type: QuestionType): boolean {
+  return type === "fill_blank" || type === "short_answer";
+}
+
 export default function ErrorQuestionsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -237,6 +241,7 @@ export default function ErrorQuestionsPage() {
       type: formatAnswer(a.answer, record.questionType),
       value: a.count,
     }));
+    const totalCount = pieData.reduce((sum, item) => sum + item.value, 0);
 
     return (
       <div className="flex flex-col gap-3 p-2">
@@ -271,18 +276,58 @@ export default function ErrorQuestionsPage() {
           <div>
             <Text strong>常见错误答案分布</Text>
             {pieData.length > 0 ? (
-              <Pie
-                data={pieData}
-                angleField="value"
-                colorField="type"
-                height={180}
-                innerRadius={0.5}
-                label={{
-                  text: "type",
-                  position: "outside",
-                }}
-                legend={{ position: "bottom" }}
-              />
+              isTextDistributionQuestion(record.questionType) ? (
+                <div className="mt-2 max-h-[280px] overflow-y-auto">
+                  <Table
+                    dataSource={pieData}
+                    rowKey="type"
+                    size="small"
+                    pagination={false}
+                    columns={[
+                      {
+                        title: "学生答案",
+                        dataIndex: "type",
+                        key: "type",
+                        ellipsis: { showTitle: false },
+                        render: (text: string) => (
+                          <Tooltip title={text} placement="topLeft" overlayStyle={{ maxWidth: 480 }}>
+                            <span className="text-xs">{text}</span>
+                          </Tooltip>
+                        ),
+                      },
+                      {
+                        title: "人数",
+                        dataIndex: "value",
+                        key: "value",
+                        width: 60,
+                        align: "center" as const,
+                      },
+                      {
+                        title: "占比",
+                        key: "ratio",
+                        width: 80,
+                        align: "center" as const,
+                        render: (_: unknown, row: { value: number }) => (
+                          <span>{totalCount > 0 ? `${((row.value / totalCount) * 100).toFixed(1)}%` : "0%"}</span>
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+              ) : (
+                <Pie
+                  data={pieData}
+                  angleField="value"
+                  colorField="type"
+                  height={180}
+                  innerRadius={0.5}
+                  label={{
+                    text: "type",
+                    position: "outside",
+                  }}
+                  legend={{ position: "bottom" }}
+                />
+              )
             ) : (
               <Empty description="无错误答案数据" />
             )}

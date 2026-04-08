@@ -11,6 +11,7 @@ import type {
   ErrorQuestionListResult,
   ErrorQuestionItem,
   CommonWrongAnswer,
+  AnswerDistributionItem,
   ClassTrend,
   ClassTrendItem,
   StudentLearningProfile,
@@ -64,11 +65,14 @@ interface QuestionAnalysisRow {
     content: string;
     max_score: number;
     correct_answer: Record<string, unknown>;
+    options: Array<{ label: string; text: string }> | null;
+    explanation: string | null;
     total_answers: number;
     correct_count: number;
     wrong_count: number;
     correct_rate: number;
     avg_score_rate: number;
+    answer_distribution: Array<{ answer: unknown; count: number }>;
   }>;
 }
 
@@ -200,6 +204,11 @@ function toQuestionAnalysis(row: QuestionAnalysisRow): QuestionAnalysis {
         wrongCount: Number(q.wrong_count) || 0,
         correctRate: Number(q.correct_rate) || 0,
         avgScoreRate: Number(q.avg_score_rate) || 0,
+        options: q.options ?? null,
+        explanation: q.explanation ?? null,
+        answerDistribution: (q.answer_distribution ?? []).map(
+          (a): AnswerDistributionItem => ({ answer: a.answer, count: Number(a.count) || 0 })
+        ),
       })
     ),
   };
@@ -415,14 +424,6 @@ async function streamAnalysis(
       }
     }
   }
-}
-
-export function streamClassReport(
-  courseId: string,
-  onToken: (text: string) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  return streamAnalysis("/api/analytics/class-report", { course_id: courseId }, onToken, signal);
 }
 
 export function streamErrorAnalysis(

@@ -1,4 +1,4 @@
-"""Analytics API — AI 学情报告 & 错因分析端点"""
+"""Analytics API — 错因分析端点"""
 
 import json
 
@@ -8,9 +8,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from src.services.learning_analytics import (
-    load_class_report_context,
     load_error_analysis_context,
-    stream_class_report,
     stream_error_analysis,
 )
 
@@ -33,44 +31,12 @@ async def _get_current_user_id(request: Request) -> str:
 
 # ── 请求模型 ────────────────────────────────────────────────
 
-class ClassReportRequest(BaseModel):
-    course_id: str
-
-
 class ErrorAnalysisRequest(BaseModel):
     assignment_id: str
     question_id: str
 
 
 # ── 端点 ────────────────────────────────────────────────────
-
-@router.post("/class-report")
-async def class_report_endpoint(
-    body: ClassReportRequest,
-    user_id: str = Depends(_get_current_user_id),
-):
-    """生成 AI 学情分析报告（SSE 流式）。"""
-    try:
-        context = await load_class_report_context(
-            course_id=body.course_id,
-            teacher_id=user_id,
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    async def event_stream():
-        try:
-            async for token in stream_class_report(context):
-                yield f"data: {json.dumps({'content': token}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
-        except Exception as exc:
-            logger.error("AI 学情报告生成异常: {}", exc)
-            yield f"data: {json.dumps({'error': 'AI 分析异常，请稍后重试'}, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
 
 @router.post("/error-analysis")
 async def error_analysis_endpoint(
@@ -88,6 +54,9 @@ async def error_analysis_endpoint(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("加载 AI 错因分析上下文失败: {}", exc)
+        raise HTTPException(status_code=500, detail="加载 AI 错因分析上下文失败")
 
     async def event_stream():
         try:

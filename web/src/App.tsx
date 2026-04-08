@@ -30,7 +30,6 @@ import TeacherAssignmentEditPage from "@/pages/teacher/AssignmentEditPage";
 import TeacherAssignmentStatsPage from "@/pages/teacher/AssignmentStatsPage";
 import TeacherGradingDetailPage from "@/pages/teacher/GradingDetailPage";
 import TeacherAnalyticsDashboardPage from "@/pages/teacher/AnalyticsDashboardPage";
-import TeacherErrorQuestionsPage from "@/pages/teacher/ErrorQuestionsPage";
 
 /* student */
 import StudentLearnPage from "@/pages/student/LearnPage";
@@ -99,7 +98,6 @@ export default function App() {
           <Route path="assignments/:assignmentId/stats" element={<TeacherAssignmentStatsPage />} />
           <Route path="assignments/:assignmentId/grade/:submissionId" element={<TeacherGradingDetailPage />} />
           <Route path="analytics" element={<TeacherAnalyticsDashboardPage />} />
-          <Route path="error-questions" element={<TeacherErrorQuestionsPage />} />
         </Route>
 
         {/* Student */}

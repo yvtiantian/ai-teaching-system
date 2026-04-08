@@ -441,11 +441,14 @@ export interface QuestionAnalysisItem {
   content: string;
   maxScore: number;
   correctAnswer: Record<string, unknown>;
+  options: QuestionOption[] | null;
+  explanation: string | null;
   totalAnswers: number;
   correctCount: number;
   wrongCount: number;
   correctRate: number;
   avgScoreRate: number;
+  answerDistribution: AnswerDistributionItem[];
 }
 
 /** teacher_get_question_analysis 返回 */
@@ -456,6 +459,11 @@ export interface QuestionAnalysis {
 
 /** 错误答案条目 */
 export interface CommonWrongAnswer {
+  answer: unknown;
+  count: number;
+}
+
+export interface AnswerDistributionItem {
   answer: unknown;
   count: number;
 }

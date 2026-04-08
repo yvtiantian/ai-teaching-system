@@ -193,6 +193,8 @@ BEGIN
                     q.content,
                     q.score           AS max_score,
                     q.correct_answer,
+                    q.options,
+                    q.explanation,
                     -- 作答总人数
                     COUNT(sa.id)      AS total_answers,
                     -- 正确人数
@@ -210,11 +212,22 @@ BEGIN
                         WHEN COUNT(sa.id) > 0 AND q.score > 0
                         THEN ROUND(AVG(sa.score) * 100.0 / q.score, 1)
                         ELSE 0
-                    END AS avg_score_rate
+                    END AS avg_score_rate,
+                    -- 全部答案分布
+                    (
+                        SELECT COALESCE(json_agg(row_to_json(ea) ORDER BY ea.count DESC), '[]'::json)
+                        FROM (
+                            SELECT sa2.answer, COUNT(*) AS count
+                            FROM public.student_answers sa2
+                            WHERE sa2.question_id = q.id
+                            GROUP BY sa2.answer
+                            ORDER BY count DESC
+                        ) ea
+                    ) AS answer_distribution
                 FROM public.assignment_questions q
                 LEFT JOIN public.student_answers sa ON sa.question_id = q.id
                 WHERE q.assignment_id = p_assignment_id
-                GROUP BY q.id, q.question_type, q.sort_order, q.content, q.score, q.correct_answer
+                GROUP BY q.id, q.question_type, q.sort_order, q.content, q.score, q.correct_answer, q.options, q.explanation
             ) t
         )
     );

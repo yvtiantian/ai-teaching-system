@@ -28,7 +28,7 @@ import {
 } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Column, Line } from "@ant-design/charts";
+import { Column, Line, Pie } from "@ant-design/charts";
 import { useAuthStore } from "@/store/authStore";
 import { getRoleRedirectPath } from "@/lib/profile";
 import { toErrorMessage, formatDateTime } from "@/lib/utils";
@@ -40,7 +40,7 @@ import {
   teacherGetClassTrend,
   teacherGetStudentProfile,
   teacherGetCourseStudentsOverview,
-  streamClassReport,
+  streamErrorAnalysis,
 } from "@/services/teacherAnalytics";
 import CommonTable from "@/components/CommonTable/CommonTable";
 import type { TeacherCourse } from "@/types/course";
@@ -52,9 +52,12 @@ import type {
   QuestionAnalysisItem,
   StudentLearningProfile,
   CourseStudentOverviewItem,
+  CommonWrongAnswer,
+  QuestionOption,
+  QuestionType,
 } from "@/types/assignment";
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 const QUESTION_TYPE_LABEL: Record<string, string> = {
   single_choice: "单选",
@@ -63,6 +66,44 @@ const QUESTION_TYPE_LABEL: Record<string, string> = {
   fill_blank: "填空",
   short_answer: "简答",
 };
+
+function stringify(val: unknown): string {
+  if (val == null) return "（未作答）";
+  if (typeof val === "string") return val;
+  if (typeof val === "boolean") return val ? "正确" : "错误";
+  if (Array.isArray(val)) return val.map(stringify).join(" | ");
+  if (typeof val === "object") return JSON.stringify(val);
+  return String(val);
+}
+
+function formatAnswer(answer: unknown, questionType: QuestionType): string {
+  if (answer == null) return "-";
+  const obj = (typeof answer === "object" && answer !== null && !Array.isArray(answer)) ? answer as Record<string, unknown> : null;
+  const val = obj?.answer ?? answer;
+  if (val == null) return "（未作答）";
+  switch (questionType) {
+    case "single_choice":
+      return stringify(val);
+    case "multiple_choice":
+      return Array.isArray(val) ? val.join(", ") : stringify(val);
+    case "true_false":
+      return val === true ? "正确" : val === false ? "错误" : stringify(val);
+    case "fill_blank":
+      return Array.isArray(val) ? val.join(" | ") : stringify(val);
+    case "short_answer":
+      return stringify(val);
+    default:
+      return stringify(val);
+  }
+}
+
+function isChoiceQuestion(type: QuestionType): boolean {
+  return type === "single_choice" || type === "multiple_choice";
+}
+
+function isTextDistributionQuestion(type: QuestionType): boolean {
+  return type === "fill_blank" || type === "short_answer";
+}
 
 export default function AnalyticsDashboardPage() {
   const navigate = useNavigate();
@@ -97,32 +138,37 @@ export default function AnalyticsDashboardPage() {
   const [profileVisible, setProfileVisible] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
-  // ── AI 学情报告 ────────────────────────────────────────
-  const [aiReport, setAiReport] = useState("");
-  const [aiReportLoading, setAiReportLoading] = useState(false);
-  const aiAbortRef = useRef<AbortController | null>(null);
+  // ── AI 错因分析 ────────────────────────────────────────
+  const [aiAnalysisMap, setAiAnalysisMap] = useState<Record<string, string>>({});
+  const [aiLoadingId, setAiLoadingId] = useState<string | null>(null);
+  const aiErrorAbortRef = useRef<AbortController | null>(null);
 
-  // ── AI 学情报告 handler ────────────────────────────────
-  const handleAiReport = useCallback(async () => {
-    if (!selectedCourseId) return;
-    aiAbortRef.current?.abort();
+  // ── AI 错因分析 handler ────────────────────────────────
+  const handleAiErrorAnalysis = useCallback(async (record: QuestionAnalysisItem) => {
+    if (!selectedAssignmentId) return;
+    aiErrorAbortRef.current?.abort();
     const controller = new AbortController();
-    aiAbortRef.current = controller;
-    setAiReport("");
-    setAiReportLoading(true);
+    aiErrorAbortRef.current = controller;
+    const key = record.questionId;
+    setAiLoadingId(key);
+    setAiAnalysisMap((prev) => ({ ...prev, [key]: "" }));
     let acc = "";
     try {
-      await streamClassReport(
-        selectedCourseId,
-        (token) => { acc += token; setAiReport(acc); },
+      await streamErrorAnalysis(
+        selectedAssignmentId,
+        record.questionId,
+        (token) => {
+          acc += token;
+          setAiAnalysisMap((prev) => ({ ...prev, [key]: acc }));
+        },
         controller.signal,
       );
     } catch (e) {
       if (!controller.signal.aborted) void message.error(toErrorMessage(e, "AI 分析失败"));
     } finally {
-      setAiReportLoading(false);
+      setAiLoadingId(null);
     }
-  }, [selectedCourseId]);
+  }, [selectedAssignmentId]);
 
   // ── Auth guard ─────────────────────────────────────────
   useEffect(() => {
@@ -302,7 +348,171 @@ export default function AnalyticsDashboardPage() {
       width: 110,
       render: (v: number) => <Progress percent={v} size="small" strokeColor={v < 60 ? "#ef4444" : undefined} />,
     },
+    {
+      title: "错误率",
+      key: "errorRate",
+      width: 100,
+      sorter: (a, b) => {
+        const rateA = a.totalAnswers > 0 ? a.wrongCount / a.totalAnswers : 0;
+        const rateB = b.totalAnswers > 0 ? b.wrongCount / b.totalAnswers : 0;
+        return rateA - rateB;
+      },
+      render: (_, r) => {
+        const rate = r.totalAnswers > 0 ? Math.round(r.wrongCount * 100 / r.totalAnswers * 10) / 10 : 0;
+        return (
+          <span style={{ color: rate >= 50 ? "#ef4444" : rate >= 30 ? "#f59e0b" : "#10b981", fontWeight: 600 }}>
+            {rate}%
+          </span>
+        );
+      },
+    },
   ];
+
+  // ── 展开行 — 题目详情 + 错误答案分布 + AI 分析 ─────────
+  const expandedRowRender = (record: QuestionAnalysisItem) => {
+    const pieData = record.answerDistribution.map((a) => ({
+      type: formatAnswer(a.answer, record.questionType),
+      value: a.count,
+    }));
+    const totalCount = pieData.reduce((sum, item) => sum + item.value, 0);
+
+    return (
+      <div className="flex flex-col gap-3 p-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* 左：题目详情 */}
+          <div>
+            <Text strong>题目内容</Text>
+            <Paragraph style={{ marginTop: 4 }}>{record.content}</Paragraph>
+            {isChoiceQuestion(record.questionType) && record.options && record.options.length > 0 && (
+              <div className="mb-3 rounded bg-gray-50 p-2 text-sm">
+                <div className="space-y-1 text-gray-600">
+                  {record.options.map((option: QuestionOption) => (
+                    <div key={option.label}>
+                      <span className="font-medium">{option.label}. </span>
+                      <span>{option.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <Text strong>正确答案</Text>
+            <Paragraph style={{ marginTop: 4 }}>{formatAnswer(record.correctAnswer, record.questionType)}</Paragraph>
+            {record.explanation && (
+              <>
+                <Text strong>解析</Text>
+                <Paragraph style={{ marginTop: 4 }}>{record.explanation}</Paragraph>
+              </>
+            )}
+          </div>
+
+          {/* 右：答案分布 */}
+          <div className="min-w-0">
+            <Text strong>答案分布</Text>
+            {pieData.length > 0 ? (
+              isTextDistributionQuestion(record.questionType) ? (
+                /* 填空题/简答题 — 用列表展示 */
+                <div className="mt-2 max-h-[280px] overflow-y-auto">
+                  <Table
+                    dataSource={pieData}
+                    rowKey="type"
+                    size="small"
+                    pagination={false}
+                    columns={[
+                      {
+                        title: "学生答案",
+                        dataIndex: "type",
+                        key: "type",
+                        ellipsis: { showTitle: false },
+                        render: (text: string) => (
+                          <Tooltip title={text} placement="topLeft" overlayStyle={{ maxWidth: 480 }}>
+                            <span className="text-xs">{text}</span>
+                          </Tooltip>
+                        ),
+                      },
+                      {
+                        title: "人数",
+                        dataIndex: "value",
+                        key: "value",
+                        width: 60,
+                        align: "center" as const,
+                      },
+                      {
+                        title: "占比",
+                        key: "ratio",
+                        width: 80,
+                        align: "center" as const,
+                        render: (_: unknown, row: { value: number }) => (
+                          <span>{totalCount > 0 ? `${((row.value / totalCount) * 100).toFixed(1)}%` : "0%"}</span>
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+              ) : (
+                /* 其他题型 — 饼图 */
+                <div className="mt-2 h-[220px] w-full">
+                  <Pie
+                    data={pieData}
+                    angleField="value"
+                    colorField="type"
+                    height={220}
+                    autoFit
+                    innerRadius={0.5}
+                    label={{
+                      text: "type",
+                      position: "outside",
+                    }}
+                    legend={{ position: "bottom" }}
+                    tooltip={(d: { type: string; value: number }) => ({
+                      name: d.type,
+                      value: `${d.value} 人`,
+                    })}
+                  />
+                </div>
+              )
+            ) : (
+              <Empty description="无作答数据" />
+            )}
+          </div>
+        </div>
+
+        {/* AI 错因分析 */}
+        <Card
+          size="small"
+          style={{ marginTop: 12 }}
+          title="AI 错因分析"
+          extra={
+            <Space>
+              {aiLoadingId === record.questionId && (
+                <Button size="small" danger onClick={() => aiErrorAbortRef.current?.abort()}>
+                  停止
+                </Button>
+              )}
+              <Button
+                type="primary"
+                size="small"
+                icon={<RobotOutlined />}
+                loading={aiLoadingId === record.questionId}
+                onClick={() => void handleAiErrorAnalysis(record)}
+              >
+                {aiAnalysisMap[record.questionId] ? "重新分析" : "AI 分析"}
+              </Button>
+            </Space>
+          }
+        >
+          {aiAnalysisMap[record.questionId] ? (
+            <div className="prose prose-sm max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {aiAnalysisMap[record.questionId]}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <Empty description="点击按钮生成 AI 错因分析" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          )}
+        </Card>
+      </div>
+    );
+  };
 
   // ── 打开学生画像 ───────────────────────────────────────
   const openStudentProfile = useCallback(
@@ -464,38 +674,6 @@ export default function AnalyticsDashboardPage() {
                     )}
                   </Card>
 
-                  {/* AI 学情报告 */}
-                  <Card
-                    title="AI 学情分析报告"
-                    size="small"
-                    extra={
-                      <Space>
-                        {aiReportLoading && (
-                          <Button size="small" danger onClick={() => aiAbortRef.current?.abort()}>
-                            停止
-                          </Button>
-                        )}
-                        <Button
-                          type="primary"
-                          icon={<RobotOutlined />}
-                          loading={aiReportLoading}
-                          onClick={() => void handleAiReport()}
-                        >
-                          {aiReport ? "重新分析" : "AI 分析"}
-                        </Button>
-                      </Space>
-                    }
-                  >
-                    {aiReport ? (
-                      <div className="prose prose-sm max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {aiReport}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <Empty description="点击右上角按钮生成 AI 学情分析报告" />
-                    )}
-                  </Card>
                 </div>
               ),
             },
@@ -550,26 +728,30 @@ export default function AnalyticsDashboardPage() {
 
                     {/* 各题正确率 */}
                     {questionAnalysis && (
-                      <Card title="各题正确率（按正确率升序）" size="small" style={{ marginTop: 16 }}>
-                        <div className="h-[520px] min-h-0">
-                          <CommonTable<QuestionAnalysisItem>
-                            columns={questionColumns}
-                            dataSource={questionAnalysis.questions}
-                            rowKey="questionId"
-                            scroll={{ x: 900 }}
-                            empty={{ title: "暂无题目分析数据" }}
-                            pagination={{
-                              current: questionPage,
-                              pageSize: questionPageSize,
-                              total: questionAnalysis.questions.length,
-                              onChange: (page, pageSize) => {
-                                setQuestionPage(page);
-                                setQuestionPageSize(pageSize);
-                              },
-                              pageSizeOptions: ["5", "10", "20", "50"],
-                            }}
-                          />
-                        </div>
+                      <Card title="各题正确率（按正确率升序，点击展开详情）" size="small" style={{ marginTop: 16 }}>
+                        <Table<QuestionAnalysisItem>
+                          columns={questionColumns}
+                          dataSource={questionAnalysis.questions}
+                          rowKey="questionId"
+                          size="small"
+                          scroll={{ x: 900 }}
+                          expandable={{
+                            expandedRowRender,
+                            expandRowByClick: true,
+                          }}
+                          pagination={{
+                            current: questionPage,
+                            pageSize: questionPageSize,
+                            total: questionAnalysis.questions.length,
+                            showSizeChanger: true,
+                            pageSizeOptions: ["5", "10", "20", "50"],
+                            showTotal: (total) => `共 ${total} 条`,
+                            onChange: (page, pageSize) => {
+                              setQuestionPage(page);
+                              setQuestionPageSize(pageSize);
+                            },
+                          }}
+                        />
                       </Card>
                     )}
                   </Spin>

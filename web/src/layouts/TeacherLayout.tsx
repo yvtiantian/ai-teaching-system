@@ -4,7 +4,6 @@ import {
   FormOutlined,
   LineChartOutlined,
   ReadOutlined,
-  WarningOutlined,
 } from "@ant-design/icons";
 import RoleDashboardLayout from "@/components/layout/RoleDashboardLayout";
 
@@ -36,12 +35,6 @@ export default function TeacherLayout() {
           href: "/teacher/analytics",
           label: "学情分析",
           icon: <LineChartOutlined />,
-        },
-        {
-          key: "error-questions",
-          href: "/teacher/error-questions",
-          label: "错题分析",
-          icon: <WarningOutlined />,
         },
       ]}
     >

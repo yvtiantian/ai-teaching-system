@@ -1,11 +1,48 @@
 'use client'
 
-import React, { useRef, useState, useEffect, useCallback } from 'react'
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { Table, Pagination } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
-import type { ColumnsType, TableProps } from 'antd/es/table'
+import type { ColumnType, ColumnsType, TableProps } from 'antd/es/table'
 import type { Key } from 'react'
 import './CommonTable.css'
+
+type SortOrder = 'ascend' | 'descend'
+
+interface SortState<T> {
+  columnKey?: Key
+  order?: SortOrder
+  compare?: (a: T, b: T, sortOrder?: SortOrder) => number
+}
+
+function getColumnCompare<T extends object>(
+  columns: ColumnsType<T>,
+  targetKey?: Key
+): SortState<T>['compare'] {
+  if (targetKey == null) return undefined
+
+  for (const column of columns) {
+    if ('children' in column && column.children) {
+      const nestedCompare = getColumnCompare(column.children, targetKey)
+      if (nestedCompare) return nestedCompare
+      continue
+    }
+
+    const leafColumn = column as ColumnType<T>
+    const columnIdentifier = leafColumn.key ?? leafColumn.dataIndex
+    if (columnIdentifier !== targetKey) continue
+
+    if (typeof leafColumn.sorter === 'function') {
+      return leafColumn.sorter
+    }
+
+    if (leafColumn.sorter && typeof leafColumn.sorter === 'object' && 'compare' in leafColumn.sorter) {
+      return leafColumn.sorter.compare
+    }
+  }
+
+  return undefined
+}
 
 // 分页配置
 export interface PaginationConfig {
@@ -77,6 +114,7 @@ function CommonTable<T extends object>({
 }: CommonTableProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [tableScrollY, setTableScrollY] = useState<number | undefined>(undefined)
+  const [sortState, setSortState] = useState<SortState<T>>({})
   const paginationConfig = pagination || undefined
 
   // 判断是否为空数据
@@ -87,13 +125,48 @@ function CommonTable<T extends object>({
     ? (paginationConfig.total > 0 || !isEmpty)
     : false
 
+  const sortedData = useMemo(() => {
+    if (paginationMode !== 'client' || !sortState.order || !sortState.compare) {
+      return dataSource
+    }
+
+    const result = [...dataSource]
+    result.sort((a, b) => {
+      const compareResult = sortState.compare?.(a, b, sortState.order) ?? 0
+      return sortState.order === 'descend' ? -compareResult : compareResult
+    })
+    return result
+  }, [dataSource, paginationMode, sortState])
+
   // 计算当前页显示的数据。server 模式不做前端切片。
   const paginatedData = paginationConfig && paginationMode === 'client'
-    ? dataSource.slice(
+    ? sortedData.slice(
       (paginationConfig.current - 1) * paginationConfig.pageSize,
       paginationConfig.current * paginationConfig.pageSize
     )
-    : dataSource
+    : sortedData
+
+  const controlledColumns = useMemo(() => {
+    const applySortOrder = (tableColumns: ColumnsType<T>): ColumnsType<T> => tableColumns.map((column) => {
+      if ('children' in column && column.children) {
+        return {
+          ...column,
+          children: applySortOrder(column.children),
+        }
+      }
+
+      const leafColumn = column as ColumnType<T>
+      const columnIdentifier = leafColumn.key ?? leafColumn.dataIndex
+      if (!leafColumn.sorter) return leafColumn
+
+      return {
+        ...leafColumn,
+        sortOrder: columnIdentifier === sortState.columnKey ? sortState.order : null,
+      }
+    })
+
+    return applySortOrder(columns)
+  }, [columns, sortState.columnKey, sortState.order])
 
   // 计算表格可用高度
   const calculateTableHeight = useCallback(() => {
@@ -153,7 +226,7 @@ function CommonTable<T extends object>({
     <div ref={containerRef} className={`common-table-wrapper ${isEmpty ? 'is-empty' : ''} ${className}`}>
       <div className="common-table-content">
         <Table<T>
-          columns={columns}
+          columns={controlledColumns}
           dataSource={paginatedData}
           rowKey={rowKey}
           loading={loading}
@@ -161,6 +234,23 @@ function CommonTable<T extends object>({
           rowSelection={tableRowSelection}
           scroll={tableScroll}
           expandable={expandable}
+          onChange={(_, __, sorter) => {
+            if (Array.isArray(sorter)) {
+              const firstSorter = sorter.find((item) => item.order)
+              setSortState({
+                columnKey: firstSorter?.columnKey,
+                order: firstSorter?.order ?? undefined,
+                compare: getColumnCompare(columns, firstSorter?.columnKey),
+              })
+              return
+            }
+
+            setSortState({
+              columnKey: sorter.columnKey,
+              order: sorter.order ?? undefined,
+              compare: getColumnCompare(columns, sorter.columnKey),
+            })
+          }}
           locale={{
             emptyText: (
               <div className="common-table-empty">
