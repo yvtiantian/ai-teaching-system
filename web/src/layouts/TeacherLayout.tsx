@@ -1,5 +1,11 @@
 import { Outlet } from "react-router";
-import { BarChartOutlined, FormOutlined, ReadOutlined } from "@ant-design/icons";
+import {
+  BarChartOutlined,
+  FormOutlined,
+  LineChartOutlined,
+  ReadOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import RoleDashboardLayout from "@/components/layout/RoleDashboardLayout";
 
 export default function TeacherLayout() {
@@ -24,6 +30,18 @@ export default function TeacherLayout() {
           href: "/teacher/assignments",
           label: "布置作业",
           icon: <FormOutlined />,
+        },
+        {
+          key: "analytics",
+          href: "/teacher/analytics",
+          label: "学情分析",
+          icon: <LineChartOutlined />,
+        },
+        {
+          key: "error-questions",
+          href: "/teacher/error-questions",
+          label: "错题分析",
+          icon: <WarningOutlined />,
         },
       ]}
     >

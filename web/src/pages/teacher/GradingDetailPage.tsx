@@ -210,36 +210,12 @@ export default function TeacherGradingDetailPage() {
     return dirtyAnswers.length;
   }, [getDirtyAnswers]);
 
-  // 一键采纳
-  const handleAcceptAll = useCallback(async () => {
-    if (!submissionId) return;
-    Modal.confirm({
-      title: "一键采纳 AI 评分",
-      content: "将所有题目的分数设为 AI 评分，确认采纳？",
-      centered: true,
-      okText: "确认采纳",
-      cancelText: "取消",
-      onOk: async () => {
-        setBusy(true);
-        try {
-          await teacherAcceptAllAiScores(submissionId);
-          message.success("已采纳所有 AI 评分");
-          await loadDetail();
-        } catch (error) {
-          message.error(toErrorMessage(error, "采纳失败"));
-        } finally {
-          setBusy(false);
-        }
-      },
-    });
-  }, [submissionId, loadDetail]);
-
   // 确认复核完成
   const handleFinalize = useCallback(async () => {
     if (!submissionId) return;
     Modal.confirm({
       title: "确认复核完成",
-      content: "确认前会自动保存本页尚未提交的评分修改。复核完成后学生将看到完整成绩、正确答案和解析。确认完成？",
+      content: "确认前会自动保存本页尚未提交的评分修改，并自动采纳其余未人工修改题目的当前 AI/自动评分结果。复核完成后学生将看到完整成绩、正确答案和解析。确认完成？",
       centered: true,
       okText: "确认完成",
       cancelText: "取消",
@@ -247,8 +223,15 @@ export default function TeacherGradingDetailPage() {
         setBusy(true);
         try {
           const savedCount = await saveDirtyAnswers();
+          if (hasAiScores) {
+            await teacherAcceptAllAiScores(submissionId);
+          }
           await teacherFinalizeGrading(submissionId);
-          message.success(savedCount > 0 ? `已自动保存 ${savedCount} 处修改并完成复核` : "复核已完成");
+          message.success(
+            savedCount > 0
+              ? `已自动保存 ${savedCount} 处修改并完成复核`
+              : "已采纳当前评分结果并完成复核"
+          );
           await loadDetail();
         } catch (error) {
           message.error(toErrorMessage(error, "确认复核失败"));
@@ -272,14 +255,9 @@ export default function TeacherGradingDetailPage() {
   const isAiGrading = detail.status === "ai_grading" || detail.status === "submitted";
   const currentTotal = Object.values(editScores).reduce((s, v) => s + (v || 0), 0);
 
-  // "一键采纳"仅在有主观题且存在 AI 评分时显示
-  const hasSubjective = detail.answers.some(
-    (a) => a.questionType === "fill_blank" || a.questionType === "short_answer"
-  );
   const hasAiScores = detail.answers.some(
     (a) => a.aiScore != null && a.gradedBy !== "teacher"
   );
-  const showAcceptAll = !isFinalized && hasSubjective && hasAiScores;
   const dirtyCount = getDirtyAnswers().length;
 
   return (
@@ -324,11 +302,6 @@ export default function TeacherGradingDetailPage() {
             <div className="ml-auto flex items-center gap-2">
               {isAiGrading && (
                 <Tag color="orange">AI 批改中，请等待完成后再复核</Tag>
-              )}
-              {showAcceptAll && (
-                <Button onClick={handleAcceptAll} disabled={busy || isAiGrading}>
-                  一键采纳 AI 评分
-                </Button>
               )}
               {dirtyCount > 0 && (
                 <Tag color="gold">有 {dirtyCount} 处修改待保存</Tag>

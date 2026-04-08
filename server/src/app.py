@@ -9,6 +9,7 @@ from src.api.health import router as health_router
 from src.api.agents import router as agents_router
 from src.api.sessions import router as sessions_router
 from src.api.assignments import router as assignments_router
+from src.api.analytics import router as analytics_router
 from src.api.middlewares.agui_session import AGUISessionMiddleware
 from src.middleware.auth import AuthMiddleware
 from src.services.agent_manager import get_agent_manager
@@ -59,3 +60,4 @@ app.include_router(health_router)
 app.include_router(agents_router)
 app.include_router(sessions_router)
 app.include_router(assignments_router)
+app.include_router(analytics_router)

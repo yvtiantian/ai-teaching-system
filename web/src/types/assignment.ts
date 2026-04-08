@@ -386,3 +386,164 @@ export interface AdminSubmissionDetail {
     nextSubmissionId: string | null;
   };
 }
+
+// ── 数据分析类型 ──────────────────────────────────────────
+
+/** 课程分析 — 单作业汇总 */
+export interface CourseAssignmentSummary {
+  id: string;
+  title: string;
+  status: AssignmentStatus;
+  totalScore: number;
+  deadline: string | null;
+  createdAt: string;
+  submittedCount: number;
+  avgScore: number | null;
+  maxScore: number | null;
+  minScore: number | null;
+}
+
+/** teacher_get_course_analytics 返回 */
+export interface CourseAnalytics {
+  courseId: string;
+  totalStudents: number;
+  assignmentCount: number;
+  assignments: CourseAssignmentSummary[];
+}
+
+/** 分数段 */
+export interface ScoreBucket {
+  bucket: string;
+  count: number;
+}
+
+export interface ScoreDistributionStats {
+  gradedCount: number;
+  avgScore: number | null;
+  maxScore: number | null;
+  minScore: number | null;
+  stdDev: number | null;
+}
+
+/** teacher_get_score_distribution 返回 */
+export interface ScoreDistribution {
+  assignmentId: string;
+  totalScore: number;
+  distribution: ScoreBucket[];
+  stats: ScoreDistributionStats;
+}
+
+/** 题目错误率分析 */
+export interface QuestionAnalysisItem {
+  questionId: string;
+  questionType: QuestionType;
+  sortOrder: number;
+  content: string;
+  maxScore: number;
+  correctAnswer: Record<string, unknown>;
+  totalAnswers: number;
+  correctCount: number;
+  wrongCount: number;
+  correctRate: number;
+  avgScoreRate: number;
+}
+
+/** teacher_get_question_analysis 返回 */
+export interface QuestionAnalysis {
+  assignmentId: string;
+  questions: QuestionAnalysisItem[];
+}
+
+/** 错误答案条目 */
+export interface CommonWrongAnswer {
+  answer: unknown;
+  count: number;
+}
+
+/** 错题列表项 */
+export interface ErrorQuestionItem {
+  questionId: string;
+  questionType: QuestionType;
+  sortOrder: number;
+  content: string;
+  maxScore: number;
+  correctAnswer: Record<string, unknown>;
+  options: QuestionOption[] | null;
+  explanation: string | null;
+  assignmentId: string;
+  assignmentTitle: string;
+  totalAnswers: number;
+  wrongCount: number;
+  errorRate: number;
+  commonWrongAnswers: CommonWrongAnswer[];
+}
+
+export interface ErrorQuestionListResult {
+  items: ErrorQuestionItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** 趋势数据项 */
+export interface ClassTrendItem {
+  id: string;
+  title: string;
+  totalScore: number;
+  createdAt: string;
+  submittedCount: number;
+  totalStudents: number;
+  avgScore: number | null;
+  submissionRate: number;
+}
+
+/** teacher_get_class_trend 返回 */
+export interface ClassTrend {
+  courseId: string;
+  trends: ClassTrendItem[];
+}
+
+/** 学生作业轨迹项 */
+export interface StudentAssignmentTrack {
+  assignmentId: string;
+  title: string;
+  maxScore: number;
+  createdAt: string;
+  submissionId: string | null;
+  status: SubmissionStatus | null;
+  studentScore: number | null;
+  submittedAt: string | null;
+  scoreRate: number | null;
+  wrongCount: number;
+  totalQuestions: number;
+}
+
+export interface StudentProfileSummary {
+  totalAssignments: number;
+  submittedCount: number;
+  avgScoreRate: number | null;
+  totalWrongCount: number;
+}
+
+/** teacher_get_student_profile 返回 */
+export interface StudentLearningProfile {
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  assignments: StudentAssignmentTrack[];
+  summary: StudentProfileSummary;
+}
+
+/** 课程学生综合得分率概览项 */
+export interface CourseStudentOverviewItem {
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  avgScoreRate: number | null;
+  gradedCount: number;
+}
+
+/** teacher_get_course_students_overview 返回 */
+export interface CourseStudentsOverview {
+  students: CourseStudentOverviewItem[];
+}
