@@ -1,9 +1,9 @@
 import {
-  BookOutlined,
+  BarChartOutlined,
   LockOutlined,
   MailOutlined,
-  ReadOutlined,
-  SafetyCertificateOutlined,
+  MessageOutlined,
+  RobotOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Card, Form, Input, Segmented, Typography } from "antd";
@@ -211,31 +211,31 @@ export default function LoginPage() {
       <section className={styles.brandPane}>
         <div className={styles.brandHeader}>
           <span className={styles.brandMark}>AI</span>
-          <span className={styles.brandName}>AI Teaching System</span>
+          <span className={styles.brandName}>AI Teaching Studio</span>
         </div>
 
-        <span className={styles.badge}>Live Resolution</span>
+        <span className={styles.badge}>AI 教学平台</span>
         <Typography.Title level={1} className={styles.brandTitle}>
-          Intelligent automation
+          AI 驱动的
           <br />
-          for modern classrooms.
+          智慧教学工作台
         </Typography.Title>
         <Typography.Paragraph className={styles.brandDescription}>
-          面向教师与学生的 AI 教学工作台，支持课程讲解、练习反馈与过程追踪。
+          集课程管理、智能出题、自动批改、AI 答疑与学情分析于一体，让教与学更高效。
         </Typography.Paragraph>
 
         <div className={styles.featureList}>
           <div className={styles.featureItem}>
-            <SafetyCertificateOutlined />
-            <span>注册后自动建立个人 Profile</span>
+            <RobotOutlined />
+            <span>智能出题与自动批改，多种题型全覆盖</span>
           </div>
           <div className={styles.featureItem}>
-            <BookOutlined />
-            <span>老师端与学生端自动按身份分流</span>
+            <BarChartOutlined />
+            <span>AI 错因分析，精准定位学生薄弱点</span>
           </div>
           <div className={styles.featureItem}>
-            <ReadOutlined />
-            <span>学习轨迹与课堂任务统一管理</span>
+            <MessageOutlined />
+            <span>AI 答疑辅导，学生随时获取个性化指导</span>
           </div>
         </div>
       </section>
@@ -243,7 +243,7 @@ export default function LoginPage() {
       <section className={styles.formPane}>
         <div className={styles.mobileBrand}>
           <span className={styles.brandMark}>AI</span>
-          <span className={styles.mobileBrandName}>AI Teaching System</span>
+          <span className={styles.mobileBrandName}>AI Teaching Studio</span>
         </div>
 
         <div className={styles.formWrap}>
@@ -385,7 +385,7 @@ export default function LoginPage() {
                         {
                           label: (
                             <span className={styles.roleLabel}>
-                              <ReadOutlined />
+                              <UserOutlined />
                               学生
                             </span>
                           ),
@@ -394,7 +394,7 @@ export default function LoginPage() {
                         {
                           label: (
                             <span className={styles.roleLabel}>
-                              <BookOutlined />
+                              <RobotOutlined />
                               老师
                             </span>
                           ),
